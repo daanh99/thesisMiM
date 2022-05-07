@@ -39,14 +39,38 @@ execucomp$announcedDate = as.integer(substr(execucomp$announcedDate, 1, 4))
 # Merge execuComp and BoardEx based on the Ticker field
 step1 = inner_join(x = boardex, y = execucomp, by = c("Ticker"= "TICKER", "AnnualReportDate" = "YEAR"))
 #step2 = merge(x = step1, y = ids, by.x = "Ticker", by.y = "ticker")
-df = left_join(x = step1, y = capitaliqAggregated, by = c("CONAME" = "relcompanyname", "AnnualReportDate" = "announcedDate"))
+#df = left_join(x = step1, y = capitaliqAggregated, by = c("CONAME" = "relcompanyname", "AnnualReportDate" = "announcedDate"))
 
-test = stringdist_join(step1, capitaliqAggregated, 
-                by= list(c("CONAME"= "relcompanyname"), c("AnnualReportDate" = "announcedDate")),
-                mode='left', #use left join
-                method = "jw", #use jw distance metric
-                max_dist=5, 
-                distance_col='dist')
+# First, need to define match_fun_distance. 
+# This is copied from the source code for distance_join in https://github.com/dgrtwo/fuzzyjoin
+match_fun_distance <- function(v1, v2) {
+  
+  # settings for this method
+  method = "manhattan"
+  max_dist = 99
+  distance_col = "dist"
+  
+  if (is.null(dim(v1))) {
+    v1 <- t(t(v1))
+    v2 <- t(t(v2))
+  }
+  if (method == "euclidean") {
+    d <- sqrt(rowSums((v1 - v2)^2))
+  }
+  else if (method == "manhattan") {
+    d <- rowSums(abs(v1 - v2))
+  }
+  ret <- tibble::tibble(instance = d <= max_dist)
+  if (!is.null(distance_col)) {
+    ret[[distance_col]] <- d
+  }
+  ret
+}
+
+joined_result <- fuzzy_join(step1, capitaliqAggregated, 
+                             by=c("CONAME" = "relcompanyname", "AnnualReportDate" = "announcedDate"), 
+                             match_fun = list(match_fun_distance, `==`),
+                             mode = "left")
 
 rm(boardex, capitaliq, execucomp, step1, ids, capitaliqAggregated)
 
@@ -63,3 +87,18 @@ hist(df$TOTAL_ALT1)
 
 summary(df$compRatio)
 hist(df$compRatio, breaks=100)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
