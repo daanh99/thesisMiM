@@ -67,47 +67,47 @@ dfmean = df %>%
   group_by(EXEC_FULLNAME) %>%
   summarise_at(vars(amountAquired, BONUS, TOTAL_ALT1, NumberDirectors), list(mean = mean))
 
-
-#============================== moderating factor 1: Board size -========================
 dfmean$compRatio = dfmean$BONUS_mean / (dfmean$TOTAL_ALT1_mean + dfmean$BONUS_mean)
-
 dfmean = dfmean[dfmean$amountAquired_mean < 10, ]
 
 
 hist(dfaqusyearly$amountAquired_mean)
 
 hist(dfmean$compRatio, breaks = 40)
+
+ggplot(dfmean, aes(x=compRatio, y=amountAquired_mean)) + geom_point() + geom_smooth(method=lm) 
+
+#============================== moderating factor 1: Board size -========================
 # Fix directors
 dfmean$NumberDirectors_factor = cut(dfmean$NumberDirectors_mean, breaks = c(0, 8, 12, 30))
 hist(dfmean$NumberDirectors_mean, breaks = 40)
 
 
-ggplot(dfaqusyearly, aes(x=AnnualReportDate, y=amountAquired_mean)) + geom_bar(stat="identity")
-
-ggplot(dfmean, aes(x=compRatio, y=amountAquired_mean)) + geom_point() + geom_smooth(method=lm) 
-
-# Moderating facor 1: Board members
 ggplot(dfmean, aes(x=compRatio, y=amountAquired_mean, color=NumberDirectors_factor)) +
   geom_point() + 
   geom_smooth(method=lm, se=FALSE, fullrange=FALSE) 
 
 
 
-#============================== moderating factor 2: Yearly aquisitions -========================
-# Calculate mean aquisitions per year
+#============================== moderating factor 2: Yearly acquisitions -========================
+# Calculate mean acquisitions per year
 dfaqusyearly = df %>%
   group_by(AnnualReportDate) %>%
   summarise_at(vars(amountAquired), list(amountAquired_mean = mean))
 
 
+ggplot(dfaqusyearly, aes(x=AnnualReportDate, y=amountAquired_mean)) + geom_bar(stat="identity")
+
 dfYearlyJoined = inner_join(x = df, y = dfaqusyearly, by = c("AnnualReportDate"= "AnnualReportDate"))
 dfYearlyJoined$compRatio = dfYearlyJoined$BONUS / (dfYearlyJoined$TOTAL_ALT1 + dfYearlyJoined$BONUS)
-dfYearlyJoined$amountAquired_factor = cut(dfYearlyJoined$amountAquired_mean, breaks = 3)
-dfYearlyJoined = dfmean[dfYearlyJoined$amountAquired_mean < 10, ]
+#dfYearlyJoined$amountAquired_mean[is.na(dfYearlyJoined$amountAquired_mean)] = 0
+dfYearlyJoined = dfYearlyJoined[dfYearlyJoined$amountAquired < 10, ]
+
+dfYearlyJoined$amountAquired_factor = cut(dfYearlyJoined$amountAquired_mean, breaks = c(-1, 1.1, 1.25, 2), labels=c("cold", "normal", "hot"))
 
 ggplot(dfYearlyJoined, aes(x=compRatio, y=amountAquired, color=amountAquired_factor)) +
   geom_point() + 
-  geom_smooth(method=lm, se=FALSE, fullrange=FALSE) 
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE) 
 
 
 
