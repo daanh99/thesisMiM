@@ -2,11 +2,13 @@
 
 library(dplyr)
 library(fuzzyjoin)
+library(ggplot2)
+
 
 boardex = read.csv("data/boardex companyid.csv")
 capitaliq = read.csv("data/capitaliq3.csv")
 execucomp = read.csv("data/execucomp may 7 3.20pm.csv")
-ids = read.csv("data/identifier table.csv")
+ids = read.csv("data/ciq common.csv")
 
 
 # Filter capitaliq on aquire
@@ -17,12 +19,11 @@ capitaliq$announcedDate = substr(capitaliq$announcedDate, 1, 4)
 capitaliq$announcedDate = as.integer(capitaliq$announcedDate)
 #per company, how many times did 2000 / 2001 / 2002 occur in announced date
 capitaliqAggregated = capitaliq %>%
-  group_by(relcompanyname) %>%
+  group_by(relcompanyid) %>%
   count(announcedDate)
 
 capitaliqAggregated = rename(capitaliqAggregated, amountAquired = n)
   
-
 # Keep all records that include CEO or chief executive officer
 execucomp = filter(execucomp, grepl("CEO | Chief executive officer", execucomp$TITLE, ignore.case = TRUE))
 
@@ -31,72 +32,82 @@ boardex$AnnualReportDate = as.integer(substr(boardex$AnnualReportDate, 1, 4))
 execucomp$announcedDate = as.integer(substr(execucomp$announcedDate, 1, 4))
 
 ###############################################
-
+#
 #            MERGING STEP
-
+#
 ###############################################
 
 # Merge execuComp and BoardEx based on the Ticker field
 step1 = inner_join(x = boardex, y = execucomp, by = c("Ticker"= "TICKER", "AnnualReportDate" = "YEAR"))
-#step2 = merge(x = step1, y = ids, by.x = "Ticker", by.y = "ticker")
-#df = left_join(x = step1, y = capitaliqAggregated, by = c("CONAME" = "relcompanyname", "AnnualReportDate" = "announcedDate"))
+step2 = inner_join(x = step1, y = ids, by = c("GVKEY"= "gvkey"))
+df = left_join(x = step2, y = capitaliqAggregated, by = c("companyid" = "relcompanyid", "AnnualReportDate" = "announcedDate"))
 
-# First, need to define match_fun_distance. 
-# This is copied from the source code for distance_join in https://github.com/dgrtwo/fuzzyjoin
-match_fun_distance <- function(v1, v2) {
-  
-  # settings for this method
-  method = "manhattan"
-  max_dist = 99
-  distance_col = "dist"
-  
-  if (is.null(dim(v1))) {
-    v1 <- t(t(v1))
-    v2 <- t(t(v2))
-  }
-  if (method == "euclidean") {
-    d <- sqrt(rowSums((v1 - v2)^2))
-  }
-  else if (method == "manhattan") {
-    d <- rowSums(abs(v1 - v2))
-  }
-  ret <- tibble::tibble(instance = d <= max_dist)
-  if (!is.null(distance_col)) {
-    ret[[distance_col]] <- d
-  }
-  ret
-}
-
-joined_result <- fuzzy_join(step1, capitaliqAggregated, 
-                             by=c("CONAME" = "relcompanyname", "AnnualReportDate" = "announcedDate"), 
-                             match_fun = list(match_fun_distance, `==`),
-                             mode = "left")
-
-rm(boardex, capitaliq, execucomp, step1, ids, capitaliqAggregated)
+rm(boardex, capitaliq, execucomp, step1, step2, ids, capitaliqAggregated)
 
 df$TOTAL_ALT1[is.na(df$TOTAL_ALT1)] = 0
 df$BONUS[is.na(df$BONUS)] = 0
-
-df$compRatio = df$BONUS / df$TOTAL_ALT1
-
-df = select(df, "CONAME", "EXEC_FULLNAME" ,"BONUS", "TOTAL_ALT1", "NumberDirectors")
-  
-hist(df$BONUS)
-
-hist(df$TOTAL_ALT1)
-
-summary(df$compRatio)
-hist(df$compRatio, breaks=100)
+df$amountAquired[is.na(df$amountAquired)] = 0
 
 
+df = select(df, "CONAME", "EXEC_FULLNAME", "amountAquired", "NumberDirectors", "BONUS", "TOTAL_ALT1", "AnnualReportDate")
+
+###############################################
+#
+#            Analysis
+#
+###############################################
+
+# Filters
+df = df[df$BONUS != 0 | df$TOTAL_ALT1 != 0, ]
+df = df[!is.na(df$NumberDirectors), ]
+
+
+# Group by executive and average aquisitions, bonus, stock comp and num directors
+dfmean = df %>%
+  group_by(EXEC_FULLNAME) %>%
+  summarise_at(vars(amountAquired, BONUS, TOTAL_ALT1, NumberDirectors), list(mean = mean))
+
+
+#============================== moderating factor 1: Board size -========================
+dfmean$compRatio = dfmean$BONUS_mean / (dfmean$TOTAL_ALT1_mean + dfmean$BONUS_mean)
+
+dfmean = dfmean[dfmean$amountAquired_mean < 10, ]
+
+
+hist(dfaqusyearly$amountAquired_mean)
+
+hist(dfmean$compRatio, breaks = 40)
+# Fix directors
+dfmean$NumberDirectors_factor = cut(dfmean$NumberDirectors_mean, breaks = c(0, 8, 12, 30))
+hist(dfmean$NumberDirectors_mean, breaks = 40)
+
+
+ggplot(dfaqusyearly, aes(x=AnnualReportDate, y=amountAquired_mean)) + geom_bar(stat="identity")
+
+ggplot(dfmean, aes(x=compRatio, y=amountAquired_mean)) + geom_point() + geom_smooth(method=lm) 
+
+# Moderating facor 1: Board members
+ggplot(dfmean, aes(x=compRatio, y=amountAquired_mean, color=NumberDirectors_factor)) +
+  geom_point() + 
+  geom_smooth(method=lm, se=FALSE, fullrange=FALSE) 
 
 
 
+#============================== moderating factor 2: Yearly aquisitions -========================
+# Calculate mean aquisitions per year
+dfaqusyearly = df %>%
+  group_by(AnnualReportDate) %>%
+  summarise_at(vars(amountAquired), list(amountAquired_mean = mean))
 
 
+dfYearlyJoined = inner_join(x = df, y = dfaqusyearly, by = c("AnnualReportDate"= "AnnualReportDate"))
+dfYearlyJoined$compRatio = dfYearlyJoined$BONUS / (dfYearlyJoined$TOTAL_ALT1 + dfYearlyJoined$BONUS)
+dfYearlyJoined$amountAquired_factor = cut(dfYearlyJoined$amountAquired_mean, breaks = 3)
+dfYearlyJoined = dfmean[dfYearlyJoined$amountAquired_mean < 10, ]
 
-
-
+ggplot(dfYearlyJoined, aes(x=compRatio, y=amountAquired, color=amountAquired_factor)) +
+  geom_point() + 
+  geom_smooth(method=lm, se=FALSE, fullrange=FALSE) 
 
 
 
