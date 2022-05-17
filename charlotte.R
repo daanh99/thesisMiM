@@ -7,7 +7,7 @@ boardex = read.csv("data/char/Board Ex 17 May 2022.csv")
 capitaliq = read.csv("data/char/capitaliq3.csv")
 execucomp = read.csv("data/char/Execucomp May 17 2022.csv")
 ids = read.csv("data/char/ciq common.csv")
-fin = read.csv("data/char/Financial Ratios 17 May 2022.csv")
+fin = read.csv("data/char/Annual Financials 17 May 2022.csv")
 
 
 # Filter capital iq on acquire
@@ -28,7 +28,6 @@ execucomp = filter(execucomp, grepl("CEO | Chief executive officer", execucomp$T
 
 # Change date to year
 boardex$AnnualReportDate = as.integer(substr(boardex$AnnualReportDate, 1, 4))
-execucomp$announcedDate = as.integer(substr(execucomp$announcedDate, 1, 4))
 execucomp$BECAMECEO = as.integer(substr(execucomp$BECAMECEO, 1, 4))
 
 ###############################################
@@ -40,10 +39,10 @@ execucomp$BECAMECEO = as.integer(substr(execucomp$BECAMECEO, 1, 4))
 # Merge execuComp and BoardEx based on the Ticker field
 step1 = inner_join(x = boardex, y = execucomp, by = c("Ticker"= "TICKER", "AnnualReportDate" = "YEAR"))
 step2 = inner_join(x = step1, y = ids, by = c("GVKEY"= "gvkey"))
-step3 = inner_join(x = step2, y = fin, by = c("GVKEY"= "gvkey"))
+step3 = left_join(x = step2, y = fin, by = c("GVKEY"= "gvkey", "AnnualReportDate" = "fyear"))
 df = left_join(x = step3, y = capitaliqAggregated, by = c("companyid" = "relcompanyid", "AnnualReportDate" = "announcedDate"))
 
-rm(boardex, capitaliq, execucomp, step1, step2, ids, capitaliqAggregated, fin, step3)
+rm(boardEx, capitaliq, execucomp, step1, step2, ids, capitaliqAggregated, fin, step3)
 
 df$TOTAL_ALT1[is.na(df$TOTAL_ALT1)] = 0
 df$BONUS[is.na(df$BONUS)] = 0
@@ -72,13 +71,13 @@ df$compRatio = df$BONUS / (df$TOTAL_ALT1 + df$BONUS)
 #dfmean$compRatio = dfmean$BONUS_mean / (dfmean$TOTAL_ALT1_mean + dfmean$BONUS_mean)
 #dfmean = dfmean[dfmean$amountAquired_mean < 10, ]
 
-df$compRatio = df$BONUS_mean / (df$TOTAL_ALT1_mean + df$BONUS_mean)
+df$compRatio = df$BONUS / (df$TOTAL_ALT1 + df$BONUS)
 
 # --------------------------------------------- Descriptive stats -------------------------------
 
-hist(dfmean$compRatio, breaks = 40)
-hist(dfaqusyearly$amountAquired_mean)
-hist(dfmean$compRatio, breaks = 40)
+hist(df$compRatio, breaks = 40)
+hist(df$amountAquired)
+hist(df$compRatio, breaks = 40)
 
 ggplot(df, aes(x=compRatio, y=amountAquired)) + geom_point() + geom_smooth(method=glm, method.args=list(family = "poisson"))  + ggtitle("Plot of average amount of aquisitions vs compensation ratio") +
   xlab("Compensation ratio") + ylab("Average aquisitions per year") +
@@ -129,16 +128,19 @@ stargazer(dfYearlyJoined, type = "html", title="Descriptive statistics", digits=
 #============================== Control variables ===========================
 
 df$aqusitionsNot0 = df$amountAquired > 0
-#df$aquisition5yearAgo = df$
 df$CEOTenure = df$BECAMECEO - df$AnnualReportDate
+df$roa = df$ni / df$at
+df$aquisitionFin = df$aqc
+
+summary(df$CEOTenure)
 
 # Table 2
 #----------------------------------------------------------
 # Define models
 #----------------------------------------------------------
-mdlA <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CONAME + AGE + roa + rd_sale + SPINDEX
-mdlB <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CONAME + AGE + roa + rd_sale + SPINDEX + NumberDirectors + amountAquired_mean
-mdlC <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CONAME + AGE + roa + rd_sale + SPINDEX + NumberDirectors + amountAquired_mean + amountAquired + compRatio
+mdlA <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CONAME + AGE + roa + SPINDEX + aquisitionFin
+mdlB <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CONAME + AGE + roa + SPINDEX + aquisitionFin + NumberDirectors + amountAquired_mean
+mdlC <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CONAME + AGE + roa + SPINDEX + aquisitionFin + NumberDirectors + amountAquired_mean + amountAquired + compRatio
 
 
 #----------------------------------------------------------
