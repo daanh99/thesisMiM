@@ -138,9 +138,9 @@ summary(df$CEOTenure)
 #----------------------------------------------------------
 # Define models
 #----------------------------------------------------------
-mdlA <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CONAME + AGE + roa + SPINDEX + aquisitionFin
-mdlB <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CONAME + AGE + roa + SPINDEX + aquisitionFin + NumberDirectors + amountAquired_mean
-mdlC <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CONAME + AGE + roa + SPINDEX + aquisitionFin + NumberDirectors + amountAquired_mean + amountAquired + compRatio
+mdlA <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio +  AGE + roa + SPINDEX + aquisitionFin
+mdlB <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio +  AGE + roa + SPINDEX + aquisitionFin + NumberDirectors + amountAquired_mean
+mdlC <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio +  AGE + roa + SPINDEX + aquisitionFin + NumberDirectors + amountAquired_mean + amountAquired + compRatio
 
 
 #----------------------------------------------------------
