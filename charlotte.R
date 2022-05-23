@@ -2,12 +2,13 @@ library(dplyr)
 library(fuzzyjoin)
 library(ggplot2)
 library(stargazer)
+library(plm)
 
 boardex = read.csv("data/char/Board Ex 17 May 2022.csv")
 capitaliq = read.csv("data/char/capitaliq3.csv")
-execucomp = read.csv("data/char/Execucomp May 17 2022.csv")
+execucomp = read.csv("data/char/Execucomp 17 May 2022.csv")
 ids = read.csv("data/char/ciq common.csv")
-fin = read.csv("data/char/Annual Financials 17 May 2022.csv")
+fin = read.csv("data/char/Annual Financials plus RD.csv")
 
 
 # Filter capital iq on acquire
@@ -24,7 +25,8 @@ capitaliqAggregated = capitaliq %>%
 capitaliqAggregated = rename(capitaliqAggregated, amountAquired = n)
   
 # Keep all records that include CEO or chief executive officer
-execucomp = filter(execucomp, grepl("CEO | Chief executive officer", execucomp$TITLE, ignore.case = TRUE))
+#execucomp = filter(execucomp, grepl("CEO | Chief executive officer", execucomp$TITLE, ignore.case = TRUE))
+execucomp = filter(execucomp, execucomp$CEOANN == "CEO")
 
 # Change date to year
 boardex$AnnualReportDate = as.integer(substr(boardex$AnnualReportDate, 1, 4))
@@ -42,14 +44,36 @@ step2 = inner_join(x = step1, y = ids, by = c("GVKEY"= "gvkey"))
 step3 = left_join(x = step2, y = fin, by = c("GVKEY"= "gvkey", "AnnualReportDate" = "fyear"))
 df = left_join(x = step3, y = capitaliqAggregated, by = c("companyid" = "relcompanyid", "AnnualReportDate" = "announcedDate"))
 
-rm(boardEx, capitaliq, execucomp, step1, step2, ids, capitaliqAggregated, fin, step3)
+#rm(boardEx, capitaliq, execucomp, step1, step2, ids, capitaliqAggregated, fin, step3)
 
 df$TOTAL_ALT1[is.na(df$TOTAL_ALT1)] = 0
 df$BONUS[is.na(df$BONUS)] = 0
 df$amountAquired[is.na(df$amountAquired)] = 0
 
+#============================== Control variables ===========================
 
-#df = select(df, "CONAME", "EXEC_FULLNAME", "amountAquired", "NumberDirectors", "BONUS", "TOTAL_ALT1", "AnnualReportDate","GenderRatio")
+df$aqusitionsNot0 = df$amountAquired > 0
+df$CEOTenure = df$AnnualReportDate - df$BECAMECEO
+df$roa = df$ni / df$at
+df$aquisitionFin = df$aqc
+df$SPINDEX = as.factor(substr(df$SPINDEX, 1, 2))
+
+df <- df %>%                            # Add lagged column
+  group_by(CONAME) %>%
+  dplyr::mutate(laggedAquisition = dplyr::lag(amountAquired, n = 5, default = NA)) %>% 
+  as.data.frame()
+
+
+summary(df$CEOTenure)
+hist(df$CEOTenure)
+
+
+negativeTenure = df[df$CEOTenure < 0,]
+df = df[df$CEOTenure >= 0,]
+
+#Remove complete NA rows
+df <- df[!apply(is.na(df), 1, all),]
+
 
 ###############################################
 #
@@ -122,40 +146,30 @@ ggplot(df, aes(x=compRatio, y=amountAquired)) +
 # Descriptives and tables
 
 #descriptive 1
-stargazer(dfYearlyJoined, type = "html", title="Descriptive statistics", digits=1, out="descriptives.doc")
+dfOnlyInteresting = select(df, "amountAquired", "NumberDirectors", "AnnualReportDate", "GenderRatio", "AGE", "roa", "xrd", "SPINDEX", "aquisitionFin", "aqusitionsNot0", "CEOTenure", "compRatio", "laggedAquisition", "amountAquired_mean")
+stargazer(dfOnlyInteresting, type = "html", title="Descriptive statistics", digits=1, out="descriptives.doc")
 
 
-#============================== Control variables ===========================
-
-df$aqusitionsNot0 = df$amountAquired > 0
-df$CEOTenure = df$BECAMECEO - df$AnnualReportDate
-df$roa = df$ni / df$at
-df$aquisitionFin = df$aqc
-
-summary(df$CEOTenure)
 
 # Table 2
 #----------------------------------------------------------
 # Define models
 #----------------------------------------------------------
-mdlA <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio +  AGE + roa + SPINDEX + aquisitionFin
-mdlB <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio +  AGE + roa + SPINDEX + aquisitionFin + NumberDirectors + amountAquired_mean
-mdlC <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio +  AGE + roa + SPINDEX + aquisitionFin + NumberDirectors + amountAquired_mean + amountAquired + compRatio
+mdlA <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition
+mdlB <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + compRatio
+mdlC <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + compRatio*NumberDirectors + compRatio*amountAquired_mean 
 
 
 #----------------------------------------------------------
 # Estimate the models
 #----------------------------------------------------------
-rsltA <- glm(mdlA, data = df, family = "poisson")
-rsltB <- glm(mdlB, data = df, family = "poisson")
-rsltC <- glm(mdlC, data = df, family = "poisson")
-
-
+rsltA <- plm(mdlA, data = df, index = c("AnnualReportDate"), family = "binomial", model="within")
+rsltB <- plm(mdlB, data = df, index = c("AnnualReportDate"), family = "binomial", model="within")
+rsltC <- plm(mdlC, data = df, index = c("AnnualReportDate"), family = "binomial", model="within")
 
 #----------------------------------------------------------
 # Make a table (with stargazer)
 #----------------------------------------------------------
-stargazer(rsltA, rsltB, rsltC,
-          align=TRUE, no.space=TRUE, intercept.bottom = FALSE)
+stargazer(rsltA, rsltB, rsltC, align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes")))
 
 
