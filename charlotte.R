@@ -8,11 +8,11 @@ boardex = read.csv("data/char/Board Ex 17 May 2022.csv")
 capitaliq = read.csv("data/char/capitaliq3.csv")
 execucomp = read.csv("data/char/Execucomp 17 May 2022.csv")
 ids = read.csv("data/char/ciq common.csv")
-fin = read.csv("data/char/Annual Financials plus RD.csv")
+fin = read.csv("data/char/Fundamentals Annual.csv")
 
 
 # Filter capital iq on acquire
-capitaliq = filter(capitaliq, capitaliq$percentAcquired == 100 | capitaliq$percentOwnership == 100 | grepl("aquisition | aquire", capitaliq$TransAnnHeadline, ignore.case = TRUE))
+capitaliq = filter(capitaliq, capitaliq$percentAcquired == 100 | capitaliq$percentOwnership == 100 | grepl("aquisition|aquire", capitaliq$TransAnnHeadline, ignore.case = TRUE))
 
 #Turn each acquisition into a total number of acquisitions per company per year
 capitaliq$announcedDate = substr(capitaliq$announcedDate, 1, 4)
@@ -74,6 +74,10 @@ df = df[df$CEOTenure >= 0,]
 #Remove complete NA rows
 df <- df[!apply(is.na(df), 1, all),]
 
+#remove duplicate GVkey-year combinations
+df = df %>%
+  group_by(GVKEY, AnnualReportDate) %>%
+  slice_head(n=1)
 
 ###############################################
 #
@@ -109,14 +113,14 @@ ggplot(df, aes(x=compRatio, y=amountAquired)) + geom_point() + geom_smooth(metho
 
 #============================== moderating factor 1: Board size -================================
 # Fix directors
-#dfmean$NumberDirectors_factor = cut(dfmean$NumberDirectors_mean, breaks = c(0, 8, 12, 30), labels = c("Small (0,8]", "Medium (8,12]", "Large 12,30]"))
-#hist(dfmean$NumberDirectors_mean, breaks = 40)
+dfmean$NumberDirectors_factor = cut(dfmean$NumberDirectors_mean, breaks = c(0, 8, 12, 30), labels = c("Small (0,8]", "Medium (8,12]", "Large 12,30]"))
+hist(dfmean$NumberDirectors_mean, breaks = 40)
 
-#ggplot(dfmean, aes(x=compRatio, y=amountAquired_mean, color=NumberDirectors_factor)) +
-#  geom_point() + 
-#  geom_smooth(method=glm, method.args=list(family = "poisson") , se=FALSE, fullrange=FALSE) + ggtitle("Plot of average amount of aquisitions vs compensation ratio per board size") +
-# xlab("Compensation ratio") + ylab("Average aquisitions per year") +
-#  ylim(0, 10)
+ggplot(dfmean, aes(x=compRatio, y=amountAquired_mean, color=NumberDirectors_factor)) +
+  geom_point() + 
+  geom_smooth(method=glm, method.args=list(family = "poisson") , se=FALSE, fullrange=FALSE) + ggtitle("Plot of average amount of aquisitions vs compensation ratio per board size") +
+ xlab("Compensation ratio") + ylab("Average aquisitions per year") +
+  ylim(0, 10)
 
 
 
@@ -127,13 +131,10 @@ dfaqusyearly = df %>%
   summarise_at(vars(amountAquired), list(amountAquired_mean = mean))
 
 ggplot(dfaqusyearly, aes(x=AnnualReportDate, y=amountAquired_mean)) + geom_bar(stat="identity")
-
 df = inner_join(x = df, y = dfaqusyearly, by = c("AnnualReportDate"= "AnnualReportDate"))
-#dfYearlyJoined = dfYearlyJoined[dfYearlyJoined$amountAquired < 10, ]
+df$amountAquired_factor = cut(df$amountAquired_mean, breaks = c(-1, 1.1, 1.25, 2), labels=c("cold", "normal", "hot"))
 
-#dfYearlyJoined$amountAquired_factor = cut(dfYearlyJoined$amountAquired_mean, breaks = c(-1, 1.1, 1.25, 2), labels=c("cold", "normal", "hot"))
-
-ggplot(df, aes(x=compRatio, y=amountAquired, color=amountAquired_factor)) +
+ggplot(df, aes(x=compRatio, y=amountAquired, color=amountAquired_mean)) +
   geom_point() + 
   geom_smooth(method=glm, method.args=list(family = "poisson"), se=FALSE, fullrange=TRUE)
 
@@ -144,32 +145,58 @@ ggplot(df, aes(x=compRatio, y=amountAquired)) +
 
 
 # Descriptives and tables
+df = na.omit(df)
+
+#Check group size
+grouped = df %>%
+  group_by(GVKEY) %>%
+  summarise(n())
+
+# Create a panel dataframe
+df.p = pdata.frame(df, index = c("GVKEY", "AnnualReportDate"))
+
+#Check group size
+grouped = df %>%
+  group_by(GVKEY) %>%
+  summarise(n())
+
 
 #descriptive 1
-dfOnlyInteresting = select(df, "amountAquired", "NumberDirectors", "AnnualReportDate", "GenderRatio", "AGE", "roa", "xrd", "SPINDEX", "aquisitionFin", "aqusitionsNot0", "CEOTenure", "compRatio", "laggedAquisition", "amountAquired_mean")
+dfOnlyInteresting = select(df, "amountAquired", "NumberDirectors", "AnnualReportDate", "GenderRatio", "AGE", "roa", "xrd", "aquisitionFin", "aqusitionsNot0", "CEOTenure", "compRatio", "laggedAquisition", "amountAquired_mean")
 stargazer(dfOnlyInteresting, type = "html", title="Descriptive statistics", digits=1, out="descriptives.doc")
 
 
+# Test for duplicate row names
+occur = data.frame(table(row.names(df.p)))
+duplicateRowNames = occur[occur$Freq > 1,]
 
 # Table 2
 #----------------------------------------------------------
 # Define models
 #----------------------------------------------------------
-mdlA <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition
-mdlB <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + compRatio
-mdlC <- amountAquired ~ AnnualReportDate + aqusitionsNot0 + GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + compRatio*NumberDirectors + compRatio*amountAquired_mean 
+mdlA <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean
+mdlB <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean + compRatio
+mdlC <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean + compRatio + compRatio:NumberDirectors
+mdlD <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean + compRatio + compRatio:amountAquired_mean
+mdlE <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean + compRatio + compRatio:NumberDirectors + compRatio:amountAquired_mean
 
+
+# Correlation Table
+correlation = cor(dfOnlyInteresting, method = c("spearman"))
+stargazer(correlation)
 
 #----------------------------------------------------------
 # Estimate the models
 #----------------------------------------------------------
-rsltA <- plm(mdlA, data = df, index = c("AnnualReportDate"), family = "binomial", model="within")
-rsltB <- plm(mdlB, data = df, index = c("AnnualReportDate"), family = "binomial", model="within")
-rsltC <- plm(mdlC, data = df, index = c("AnnualReportDate"), family = "binomial", model="within")
+rsltA <- plm(mdlA, data = df.p, family = binomial, model="within")
+rsltB <- plm(mdlB, data = df.p, family = binomial, model="within")
+rsltC <- plm(mdlC, data = df.p, family = binomial, model="within")
+rsltD <- plm(mdlD, data = df.p, family = binomial, model="within")
+rsltE <- plm(mdlE, data = df.p, family = binomial, model="within")
 
 #----------------------------------------------------------
 # Make a table (with stargazer)
 #----------------------------------------------------------
-stargazer(rsltA, rsltB, rsltC, align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes")))
-
+stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
+summary(rsltE)
 
