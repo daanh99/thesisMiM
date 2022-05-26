@@ -1,0 +1,6 @@
+
+<table style="text-align:center"><tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td>Model</td><td>AUC.A</td></tr>
+<tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td>Classification tree</td><td>0.795</td></tr>
+<tr><td>Random forest</td><td>0.910</td></tr>
+<tr><td>Gradient boosting machine</td><td>0.791</td></tr>
+<tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr></table>
