@@ -188,15 +188,15 @@ stargazer(correlation)
 #----------------------------------------------------------
 # Estimate the models
 #----------------------------------------------------------
-rsltA <- plm(mdlA, data = df.p, family = binomial, model="within")
-rsltB <- plm(mdlB, data = df.p, family = binomial, model="within")
-rsltC <- plm(mdlC, data = df.p, family = binomial, model="within")
-rsltD <- plm(mdlD, data = df.p, family = binomial, model="within")
-rsltE <- plm(mdlE, data = df.p, family = binomial, model="within")
+rsltA <- plm(mdlA, data = df.p, family = "binomial", model="within")
+rsltB <- plm(mdlB, data = df.p, family = "binomial", model="within")
+rsltC <- plm(mdlC, data = df.p, family = "binomial", model="within")
+rsltD <- plm(mdlD, data = df.p, family = "binomial", model="within")
+rsltE <- plm(mdlE, data = df.p, family = "binomial", model="within")
 
 #----------------------------------------------------------
 # Make a table (with stargazer)
 #----------------------------------------------------------
 stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
 summary(rsltE)
-
+q

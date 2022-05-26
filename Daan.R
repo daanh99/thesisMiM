@@ -7,7 +7,6 @@ library(rpart)
 library(rpart.plot)
 library(randomForest) 
 library(gbm) 
-library(magrittr)
 library(ROCR)
 
 
@@ -136,7 +135,7 @@ grouped = df.p %>%
   group_by(rawData.GVKEY) %>%
   summarise(n())
 
-rsltA = plm(mdlE, df.p, family = "logit",  model="within")
+rsltA = plm(mdlE, df.p, family = "binomial",  model="within")
 
 summary(rsltA)
 stargazer(rsltA, type = "text")
@@ -154,21 +153,20 @@ mdlD = bankruptcy_class ~ ceoAge + ceoGender + firmSize + genderRatio + industry
 mdlE = bankruptcy_class ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality
 
 
-
 # ------------- classification tree ----------------
 rsltTreeA <- rpart(mdlA, 
                    data=df,
-                   method="anova", 
+                   method="class", 
                    parms = list(split = "information"))
 rsltTreeB <- rpart(mdlE,
                    data=df,
-                   method="anova", 
+                   method="class", 
                    parms = list(split = "information"))
 # Make plots
 rpart.plot(rsltTreeA, box.palette = "Blues", extra = 101, digits = 3)
 rpart.plot(rsltTreeB, box.palette = "Blues", extra = 101, digits = 3)
 
-plotcp(rsltTreeA)
+plotcp(rsltTreeB)
 
 
 # Print trees to find rules
@@ -259,7 +257,7 @@ abline(a = 0, b = 1, lty = 3, lwd = 1.5)
 
 legend(0.40,0.20, c("Classification tree",
                     "Random forests",
-                    "Gradient boosting (50 Trees)",
+                    "Gradient boosting (50 Trees)"
                     ),
        col = c("red", "blue", "green"), lwd=3)
 
