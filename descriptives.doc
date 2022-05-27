@@ -1,4 +1,26 @@
 
-<table style="text-align:center"><caption><strong>Descriptive statistics</strong></caption>
-<tr><td colspan="6" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">Statistic</td><td>N</td><td>Mean</td><td>St. Dev.</td><td>Min</td><td>Max</td></tr>
-<tr><td colspan="6" style="border-bottom: 1px solid black"></td></tr></table>
+% Table created by stargazer v.5.2.2 by Marek Hlavac, Harvard University. E-mail: hlavac at fas.harvard.edu
+% Date and time: vr, mei 27, 2022 - 12:06:54
+\begin{table}[!htbp] \centering 
+  \caption{Descriptive statistics} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}}lccccccc} 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+Statistic & \multicolumn{1}{c}{N} & \multicolumn{1}{c}{Mean} & \multicolumn{1}{c}{St. Dev.} & \multicolumn{1}{c}{Min} & \multicolumn{1}{c}{Pctl(25)} & \multicolumn{1}{c}{Pctl(75)} & \multicolumn{1}{c}{Max} \\ 
+\hline \\[-1.8ex] 
+amountAquired & 3,990 & 1.4 & 2.5 & 0 & 0 & 2 & 30 \\ 
+NumberDirectors & 3,990 & 8.9 & 2.1 & 1 & 7 & 10 & 17 \\ 
+GenderRatio & 3,990 & 0.9 & 0.1 & 0 & 0.8 & 1 & 1 \\ 
+AGE & 3,990 & 56.2 & 7.2 & 32 & 51 & 60 & 96 \\ 
+roa & 3,990 & 0.03 & 0.2 & $-$2.5 & 0.01 & 0.1 & 0.8 \\ 
+xrd & 3,990 & 295.8 & 1,175.8 & 0.0 & 0.0 & 106.7 & 27,573.0 \\ 
+aquisitionFin & 3,990 & 279.6 & 1,760.1 & $-$1,123.0 & 0.0 & 64.1 & 43,309.0 \\ 
+aqusitionsNot0 & 3,990 & 0.5 & 0.5 & 0 & 0 & 1 & 1 \\ 
+CEOTenure & 3,990 & 7.5 & 7.0 & 0 & 2 & 10 & 61 \\ 
+compRatio & 3,990 & 0.03 & 0.1 & $-$0.002 & 0.0 & 0.0 & 0.5 \\ 
+laggedAquisition & 3,990 & 1.4 & 2.5 & 0 & 0 & 2 & 30 \\ 
+amountAquired\_mean & 3,990 & 1.2 & 0.4 & 0.0 & 1.2 & 1.4 & 1.5 \\ 
+\hline \\[-1.8ex] 
+\end{tabular} 
+\end{table} 

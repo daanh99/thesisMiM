@@ -4,11 +4,11 @@ library(ggplot2)
 library(stargazer)
 library(plm)
 
-boardex = read.csv("data/char/Board Ex 17 May 2022.csv")
+boardex = read.csv("data/char/Board Ex 1999.csv")
 capitaliq = read.csv("data/char/capitaliq3.csv")
-execucomp = read.csv("data/char/Execucomp 17 May 2022.csv")
+execucomp = read.csv("data/char/Execucomp 1995.csv")
 ids = read.csv("data/char/ciq common.csv")
-fin = read.csv("data/char/Fundamentals Annual.csv")
+fin = read.csv("data/char/Compustat Fundamentals Annual 1995.csv")
 
 
 # Filter capital iq on acquire
@@ -60,7 +60,7 @@ df$SPINDEX = as.factor(substr(df$SPINDEX, 1, 2))
 
 df <- df %>%                            # Add lagged column
   group_by(CONAME) %>%
-  dplyr::mutate(laggedAquisition = dplyr::lag(amountAquired, n = 5, default = NA)) %>% 
+  dplyr::mutate(laggedAquisition = dplyr::lag(amountAquired, n = 1, default = NA)) %>% 
   as.data.frame()
 
 
@@ -127,8 +127,10 @@ ggplot(dfmean, aes(x=compRatio, y=amountAquired_mean, color=NumberDirectors_fact
 #============================== moderating factor 2: Yearly acquisitions -========================
 # Calculate mean acquisitions per year
 dfaqusyearly = df %>%
-  group_by(AnnualReportDate) %>%
+  group_by(AnnualReportDate = AnnualReportDate - 1) %>%
   summarise_at(vars(amountAquired), list(amountAquired_mean = mean))
+
+
 
 ggplot(dfaqusyearly, aes(x=AnnualReportDate, y=amountAquired_mean)) + geom_bar(stat="identity")
 df = inner_join(x = df, y = dfaqusyearly, by = c("AnnualReportDate"= "AnnualReportDate"))
@@ -148,27 +150,29 @@ ggplot(df, aes(x=compRatio, y=amountAquired)) +
 df = na.omit(df)
 
 #Check group size
-grouped = df %>%
+df = df %>%
   group_by(GVKEY) %>%
-  summarise(n())
+  mutate(freq = n()) %>% 
+  ungroup()
+  
+df = df[df$freq > 1,]
 
 # Create a panel dataframe
 df.p = pdata.frame(df, index = c("GVKEY", "AnnualReportDate"))
 
-#Check group size
-grouped = df %>%
-  group_by(GVKEY) %>%
-  summarise(n())
-
-
-#descriptive 1
-dfOnlyInteresting = select(df, "amountAquired", "NumberDirectors", "AnnualReportDate", "GenderRatio", "AGE", "roa", "xrd", "aquisitionFin", "aqusitionsNot0", "CEOTenure", "compRatio", "laggedAquisition", "amountAquired_mean")
-stargazer(dfOnlyInteresting, type = "html", title="Descriptive statistics", digits=1, out="descriptives.doc")
-
-
 # Test for duplicate row names
 occur = data.frame(table(row.names(df.p)))
 duplicateRowNames = occur[occur$Freq > 1,]
+
+
+#descriptive 1
+dfOnlyInteresting = select(df.p, "amountAquired", "NumberDirectors", "AnnualReportDate", "GenderRatio", "AGE", "roa", "xrd", "aquisitionFin", "aqusitionsNot0", "CEOTenure", "compRatio", "laggedAquisition", "amountAquired_mean")
+stargazer(dfOnlyInteresting, type = "latex", title="Descriptive statistics", digits=1, out="descriptives.doc")
+
+summary(df$AnnualReportDate)
+
+df.p$compXNumDirectors = df.p$compRatio * df.p$NumberDirectors
+df.p$compXAquiredMean  = df.p$compRatio * df.p$amountAquired_mean
 
 # Table 2
 #----------------------------------------------------------
@@ -180,10 +184,6 @@ mdlC <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisiti
 mdlD <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean + compRatio + compRatio:amountAquired_mean
 mdlE <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean + compRatio + compRatio:NumberDirectors + compRatio:amountAquired_mean
 
-
-# Correlation Table
-correlation = cor(dfOnlyInteresting, method = c("spearman"))
-stargazer(correlation)
 
 #----------------------------------------------------------
 # Estimate the models
@@ -197,6 +197,26 @@ rsltE <- plm(mdlE, data = df.p, family = "binomial", model="within")
 #----------------------------------------------------------
 # Make a table (with stargazer)
 #----------------------------------------------------------
-stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
+stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, title = "With colon",  align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
 summary(rsltE)
-q
+
+logLik.plm <- function(object){
+  out <- -plm::nobs(object) * log(2 * var(object$residuals) * pi)/2 - deviance(object)/(2 * var(object$residuals))
+  
+  attr(out,"df") <- nobs(object) - object$df.residual
+  attr(out,"nobs") <- plm::nobs(summary(object))
+  return(out)
+}
+
+logLik(rsltA)
+logLik(rsltB)
+logLik(rsltC)
+logLik(rsltD)
+logLik(rsltE)
+
+
+
+# Correlation Table
+correlation = cor(dfOnlyInteresting, method = c("spearman"))
+stargazer(correlation)
+

@@ -125,7 +125,13 @@ mdlE = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry
 mdlF = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + I(ceoTenure^2) + ceoAttendance + ceoVotingPower + ceoDuality
 
 
-df.p = pdata.frame(df, index=c("rawData.GVKEY", "year"))
+df.p = pdata.frame(df, index=c("rawData.GVKEY", "year"))#Check group size
+df = df %>%
+  group_by(GVKEY) %>%
+  mutate(freq = n()) %>% 
+  ungroup()
+
+df = df[df$freq > 1,]
 summary(df.p)
 
 hist(df.p$ceoAge)
