@@ -8,7 +8,7 @@ library(rpart.plot)
 library(randomForest) 
 library(gbm) 
 library(ROCR)
-
+library(magrittr)
 
 ISS = read.csv2("data/daan/ISS.csv", head = TRUE, sep=",")
 boardEx = read.csv("data/daan/boardex2.csv")
@@ -16,7 +16,7 @@ execucomp = read.csv("data/daan/execucomp.csv")
 ids = read.csv("data/char/ciq common.csv")
 fin = read.csv("data/daan/Fundamentals Daan.csv")
 
-
+# Filters: Data Selection
 execucomp = execucomp[execucomp$CEOANN == "CEO", ]
 ISS = ISS[ISS$Employment_CEO == "Yes", ]
 boardEx = boardEx[grepl("CEO|Chief Executive Officer", boardEx$RoleName, ignore.case = TRUE), ]
@@ -49,9 +49,11 @@ df$firmSize = rawData$at
 df$genderRatio = rawData$GenderRatio
 df$industry = as.factor(substr(rawData$SPINDEX, 1, 2))
 df$OtherBoards = ifelse(is.na(rawData$TotNoOthLstdBrd), 0, rawData$TotNoOthLstdBrd)
+df$timeOtherComp = ifelse(is.na(rawData$AvgTimeOthCo), 0, rawData$AvgTimeOthCo)
 df$TimeUntilRetire = rawData$TimeRetirement
 df$year = rawData$YEAR
 df$sales =rawData$sale
+df$boardSize = rawData$NumberDirectors
 
 # ================ Research variables ================
 #CEO Duality
@@ -80,8 +82,6 @@ df$ceoVotingPower[is.na(df$ceoVotingPower)] = 0
 
 summary(df)
 
-
-
 df = na.omit(df)
 
 hist(df$bankruptcy_score, breaks = 100)
@@ -101,7 +101,8 @@ df = df %>%
 
 dfCor = df
 dfCor$industry = NULL
-cor(dfCor, method = c("spearman"))
+correlation = cor(dfCor, method = c("spearman"))
+stargazer(correlation)
 
 ggplot(df, 
   aes(x=ceoTenure, y=bankruptcy_score)) +
@@ -116,16 +117,27 @@ ggplot(df,
 #                                             #
 ###############################################
 
+mdlA = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp
+mdlB = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure 
+mdlC = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance
+mdlD = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance + ceoVotingPower
+mdlE = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality
+mdlF = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + I(ceoTenure^2) + ceoAttendance + ceoVotingPower + ceoDuality
 
-mdlA = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards
-mdlB = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + ceoTenure 
-mdlC = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + ceoTenure + ceoAttendance
-mdlD = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + ceoTenure + ceoAttendance + ceoVotingPower
-mdlE = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality
 
 df.p = pdata.frame(df, index=c("rawData.GVKEY", "year"))
 summary(df.p)
 
+hist(df.p$ceoAge)
+hist(df.p$ceoGender)
+hist(df.p$genderRatio)
+hist(df.p$OtherBoards)
+hist(as.numeric(df.p$industry))
+hist(log(df.p$timeOtherComp))
+hist(log(df.p$ceoTenure))
+hist(df.p$ceoAttendance)
+hist(log(df.p$ceoVotingPower))
+hist(df.p$ceoDuality)
 
 occur = data.frame(table(row.names(df.p)))
 duplicateRowNames = occur[occur$Freq > 1,]
@@ -135,10 +147,23 @@ grouped = df.p %>%
   group_by(rawData.GVKEY) %>%
   summarise(n())
 
-rsltA = plm(mdlE, df.p, family = "binomial",  model="within")
 
-summary(rsltA)
-stargazer(rsltA, type = "text")
+rsltA = plm(mdlA, df.p,  model="within")
+rsltB = plm(mdlB, df.p,  model="within")
+rsltC = plm(mdlC, df.p,  model="within")
+rsltD = plm(mdlD, df.p,  model="within")
+rsltE = plm(mdlE, df.p,  model="within")
+
+rsltERandom = plm(mdlE, df.p,  model="random")
+rsltEORS = plm(mdlE, df.p,  model="pooling")
+phtest(rsltE, rsltERandom)
+
+pFtest(rsltE, rsltEORS) 
+
+summary(rsltE)
+stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, type = "latex")
+
+
 
 ###############################################
 #                                             #
@@ -146,20 +171,41 @@ stargazer(rsltA, type = "text")
 #                                             #
 ###############################################
 
-mdlA = bankruptcy_class ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards
-mdlB = bankruptcy_class ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + ceoTenure 
-mdlC = bankruptcy_class ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + ceoTenure + ceoAttendance
-mdlD = bankruptcy_class ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + ceoTenure + ceoAttendance + ceoVotingPower
-mdlE = bankruptcy_class ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality
+mdlA = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize
+mdlB = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure 
+mdlC = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance
+mdlD = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoVotingPower
+mdlE = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality
+
+
+# -----------------  Create training/test split ----------------------------  
+## 75% of the sample size
+smp_size <- floor(0.75 * nrow(df))
+
+## set the seed to make your partition reproducible
+set.seed(123)
+train_ind <- sample(seq_len(nrow(df)), size = smp_size)
+
+train <- df[train_ind, ]
+test <- df[-train_ind, ]
+
+summary(train)
+summary(test)
+
+# -------------  Regression -------------------------
+rsltReg <- lm(mdlE, data = train)
+
+# -------------  Binomial regression ----------------
+rsltLog <- glm(mdlE, data = train, family = binomial(link="logit"))
 
 
 # ------------- classification tree ----------------
 rsltTreeA <- rpart(mdlA, 
-                   data=df,
+                   data=train,
                    method="class", 
                    parms = list(split = "information"))
 rsltTreeB <- rpart(mdlE,
-                   data=df,
+                   data=train,
                    method="class", 
                    parms = list(split = "information"))
 # Make plots
@@ -174,15 +220,15 @@ print(rsltTreeA)
 print(rsltTreeB)
 
 # ------------- Random Forest ----------------
-numA <- length(labels(terms(mdlA, data=df)))
-numB <- length(labels(terms(mdlE, data=df)))
+numA <- length(labels(terms(mdlA, data=train)))
+numB <- length(labels(terms(mdlE, data=train)))
 
 # Set the number of variables allowed per split
 mA <- round(sqrt(numA))
 mB <- round(sqrt(numB))
 
-rsltFrstA <- randomForest(mdlA, data=df, ntree=100, mtry=mA, importance=TRUE)
-rsltFrstB <- randomForest(mdlE, data=df, ntree=100, mtry=mB, importance=TRUE)
+rsltFrstA <- randomForest(mdlA, data=train, ntree=100, mtry=mA, importance=TRUE, type="classification")
+rsltFrstB <- randomForest(mdlE, data=train, ntree=100, mtry=mB, importance=TRUE, type="classification")
 
 round(importance(rsltFrstA), 3)
 round(importance(rsltFrstB), 3)
@@ -204,11 +250,11 @@ nTrees <- 50
 # gbm specifies the distribution of the target by means of 
 # parameter `family` -- as a result, the original formula
 # mdlA/mdlB can be used
-rsltGbmA <- gbm(mdlA, data=df, distribution="gaussian",
+rsltGbmA <- gbm(mdlA, data=train, distribution="gaussian",
                 n.trees=nTrees, interaction.depth=2, shrinkage = 0.01,
                 bag.fraction=0.5,
                 n.minobsinnode=5)
-rsltGbmB <- gbm(mdlE, data=df, distribution="gaussian",
+rsltGbmB <- gbm(mdlE, data=train, distribution="gaussian",
                 n.trees=nTrees, interaction.depth=2, shrinkage = 0.01,
                 bag.fraction=0.5,
                 n.minobsinnode=5)
@@ -222,60 +268,67 @@ summary(rsltGbmB)
 
 # ------------------- performance analysis ------------------
 
-yvalue    <- df$bankruptcy_class
-probTreeA <- predict(rsltTreeB, type = "vector")
-probFrstA <- predict(rsltFrstB, type="response")
-probGbmA  <- predict(rsltGbmB, type="response", n.trees=nTrees)
+yvalue    <- test$bankruptcy_class
+probTreeA <- predict(rsltTreeB, type="prob")[,2]
+probFrstA <- predict(rsltFrstB, type="prob")[,2]
+probGbmA  <- predict(rsltGbmB,  type="response", n.trees=nTrees)
+probReg   <- predict(rsltReg,   type="response")
+probLog   <- predict(rsltLog,   type="response")
 
 predTreeA <- as.numeric(probTreeA > 0.5)
 predFrstA <- as.numeric(probFrstA > 0.5)
-predGbmA <- as.numeric(probGbmA > 0.5)
+predGbmA <-  as.numeric(probGbmA > 0.5)
+predReg <-   as.numeric(probReg > 0.5)
+predLog <-   as.numeric(probLog > 0.5)
 
 # ---- II ----
 summary(yvalue)
 
 table(Predicted = predTreeA, Observed = yvalue)
 table(Predicted = predFrstA, Observed = yvalue)
-table(Predicted = predGbmA, Observed = yvalue)
-
+table(Predicted = predGbmA,  Observed = yvalue)
 
 # ---- I ----
 pred.TreeA  <- prediction(probTreeA, yvalue)
 pred.FrstA  <- prediction(probFrstA, yvalue)
 pred.GbmA   <- prediction(probGbmA,  yvalue)
+pred.Reg    <- prediction(probReg,   yvalue) 
+pred.Log    <- prediction(probLog,   yvalue)
 
 perf.TreeA  <- performance(pred.TreeA, measure="tpr", x.measure="fpr")
 perf.FrstA  <- performance(pred.FrstA, measure="tpr", x.measure="fpr")
 perf.GbmA   <- performance(pred.GbmA,  measure="tpr", x.measure="fpr")
+perf.Reg    <- performance(pred.Reg,   measure="tpr", x.measure="fpr")
+perf.Log    <- performance(pred.Log,   measure="tpr", x.measure="fpr")
+
 
 plot(perf.TreeA, lty = 1, lwd = 2.0, col = "red", main="Classification performance")
 plot(perf.FrstA, lty = 1, lwd = 2.0, col = "blue", add = TRUE)
 plot(perf.GbmA,  lty = 1, lwd = 2.0, col = "green", add = TRUE)
-
+plot(perf.Reg,   lty = 1, lwd = 2.0, col = "gray", add = TRUE)
+plot(perf.Log,   lty = 1, lwd = 2.0, col = "yellow", add = TRUE)
 
 abline(a = 0, b = 1, lty = 3, lwd = 1.5)
 
-legend(0.40,0.20, c("Classification tree",
+legend(0.40,0.30, c("Classification tree",
                     "Random forests",
-                    "Gradient boosting (50 Trees)"
-                    ),
-       col = c("red", "blue", "green"), lwd=3)
+                    "Gradient boosting (50 Trees)",
+                    "Linear Regression",
+                    "Logistic Regression"),
+       col = c("red", "blue", "green", "grey", "yellow"), lwd=3)
 
 # ---- II ----
 # Find auc values
 aucTreeA <- performance(pred.TreeA, measure = "auc")@y.values[[1]]
 aucFrstA <- performance(pred.FrstA, measure = "auc")@y.values[[1]]
 aucGbmA  <- performance(pred.GbmA,  measure = "auc")@y.values[[1]]
-
+aucReg   <- performance(pred.Reg,   measure = "auc")@y.values[[1]]
+aucLog   <- performance(pred.Log,   measure = "auc")@y.values[[1]]
+ 
 # Make data frame with results
 dsAUC <- data.frame(
-  Model=c("Classification tree", "Random forest", "Gradient boosting machine"),
-  AUC.A=c(aucTreeA, aucFrstA, aucGbmA))
+  Model=c("Classification tree", "Random forest", "Gradient boosting machine", "Linear Regression", "Logistic Regression"),
+  AUC.A=c(aucTreeA, aucFrstA, aucGbmA, aucReg, aucLog))
 
 stargazer(dsAUC, summary = FALSE,
           align = TRUE, no.space = TRUE, rownames = FALSE)
-
-stargazer(dsAUC, summary = FALSE,
-          align = TRUE, no.space = TRUE, rownames = FALSE,
-          type="html", out="table.doc")
-
