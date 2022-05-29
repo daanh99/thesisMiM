@@ -222,10 +222,10 @@ summary(test)
 
 # K-fold Random Forest
 numFolds <- caret::trainControl(method = "cv", number = 10)
-cpGrid <- expand.grid(.cp = seq(0.01, 0.5, 0.01))
+cpGrid <- expand.grid(.cp = seq(0.001, 0.2, 0.001))
 
 tree = caret::train(mdlE, data = train, method = "rpart", trControl = numFolds, tuneGrid = cpGrid)
-
+tree
 # -------------  Regression -------------------------
 rsltReg <- lm(mdlE, data = train)
 
