@@ -213,19 +213,23 @@ smp_size <- floor(0.75 * nrow(df))
 
 
 ## set the seed to make your partition reproducible
-train.index <- createDataPartition(df$bankruptcy_class, p = .7, list = FALSE)
-train <- df[ train.index,]
-test  <- df[-train.index,]
+nID <- length(unique(df$rawData.GVKEY))
+p = 0.75
+set.seed(123)
+inTrainID <- sample(unique(df$rawData.GVKEY), round(nID * p), replace=FALSE)
+train <- df[df$rawData.GVKEY %in% inTrainID, ] 
+test <- df[!df$rawData.GVKEY %in% inTrainID, ]
 
 summary(train)
 summary(test)
 
 # K-fold Random Forest
 numFolds <- caret::trainControl(method = "cv", number = 10)
-cpGrid <- expand.grid(.cp = seq(0.001, 0.2, 0.001))
+cpGrid <- expand.grid(.cp = seq(0.001, 0.5, 0.001))
+
 
 tree = caret::train(mdlE, data = train, method = "rpart", trControl = numFolds, tuneGrid = cpGrid)
-tree
+
 # -------------  Regression -------------------------
 rsltReg <- lm(mdlE, data = train)
 
@@ -261,8 +265,8 @@ numB <- length(labels(terms(mdlE, data=train)))
 mA <- round(sqrt(numA))
 mB <- round(sqrt(numB))
 
-rsltFrstA <- randomForest(mdlA, data=train, ntree=100, mtry=mA, importance=TRUE, type="classification")
-rsltFrstB <- randomForest(mdlE, data=train, ntree=100, mtry=mB, importance=TRUE, type="classification")
+rsltFrstA <- randomForest(mdlA, data=train, ntree=100, mtry=mA, importance=TRUE, type="classification", cp = 0.003)
+rsltFrstB <- randomForest(mdlE, data=train, ntree=100, mtry=mB, importance=TRUE, type="classification", cp = 0.003)
 
 round(importance(rsltFrstA), 3)
 round(importance(rsltFrstB), 3)
