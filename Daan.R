@@ -9,6 +9,8 @@ library(randomForest)
 library(gbm) 
 library(ROCR)
 library(magrittr)
+library(caret)
+
 
 ISS = read.csv2("data/daan/ISS.csv", head = TRUE, sep=",")
 ISSLegacy = read.csv2("data/daan/ISS legacy.csv", head = TRUE, sep=",")
@@ -201,21 +203,28 @@ mdlD = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio
 mdlE = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality
 
 
+# Test the bankruptcy_class balance of the dataset
+summary(df$bankruptcy_class)
+
+
 # -----------------  Create training/test split ----------------------------  
 ## 75% of the sample size
 smp_size <- floor(0.75 * nrow(df))
 
 
 ## set the seed to make your partition reproducible
-set.seed(123)
-
-train_ind <- sample(seq_len(nrow(df)), size = smp_size)
-
-train <- df[train_ind, ]
-test <- df[-train_ind, ]
+train.index <- createDataPartition(df$bankruptcy_class, p = .7, list = FALSE)
+train <- df[ train.index,]
+test  <- df[-train.index,]
 
 summary(train)
 summary(test)
+
+# K-fold Random Forest
+numFolds <- caret::trainControl(method = "cv", number = 10)
+cpGrid <- expand.grid(.cp = seq(0.01, 0.5, 0.01))
+
+tree = caret::train(mdlE, data = train, method = "rpart", trControl = numFolds, tuneGrid = cpGrid)
 
 # -------------  Regression -------------------------
 rsltReg <- lm(mdlE, data = train)
