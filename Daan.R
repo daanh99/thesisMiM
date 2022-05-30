@@ -10,6 +10,7 @@ library(gbm)
 library(ROCR)
 library(magrittr)
 library(caret)
+library(car)
 
 
 ISS = read.csv2("data/daan/ISS.csv", head = TRUE, sep=",")
@@ -59,9 +60,11 @@ execucomp$BECAMECEO = as.integer(substr(execucomp$BECAMECEO, 1, 4))
 step1 = inner_join(x = execucomp, y = ids, by = c("GVKEY"= "gvkey"))
 step2 = inner_join(x = step1, y = fin, by = c("GVKEY"= "gvkey", "YEAR" = "fyear"))
 step3 = inner_join(x = step2, y = boardEx, by = c("tic"= "Ticker", "YEAR" = "AnnualReportDate"))
+
 rawData = inner_join(x = step3, y = ISS, by = c("TICKER" = "Ticker", "YEAR" = "year"))
 
-df = data.frame(rawData$GVKEY)
+
+df = data.frame(rawData.GVKEY = as.factor(rawData$GVKEY))
 
 # ============== Control Variables ====================
 df$ceoAge = rawData$AGE
@@ -105,8 +108,6 @@ df$ceoVotingPower[is.na(df$ceoVotingPower)] = 0
 
 df = na.omit(df)
 
-
-
 #remove duplicate GVkey-year combinations
 df = df %>%
   group_by(rawData.GVKEY, year) %>%
@@ -118,7 +119,9 @@ hist(df$bankruptcy_score, breaks = 100)
 
 dfCor = df
 dfCor$industry = NULL
-correlation = cor(dfCor, method = c("spearman"))
+dfCor$Freq = NULL
+dfCor$rawData.GVKEY = NULL
+correlation = cor(dfCor, method = c("pearson"))
 stargazer(correlation)
 
 summary(df)
@@ -139,18 +142,29 @@ df = df %>%
 
 df = df[df$freq > 1,]
 
+
+df.toScale = df
+df.toScale$industry = NULL
+df.toScale$rawData.GVKEY = NULL
+df.scaled = data.frame(scale(df.toScale))
+
+df.scaled$industry = df$industry
+df.scaled$rawData.GVKEY = df$rawData.GVKEY
+
+#df = df.scaled
+
 ###############################################
 #                                             #
 #                Regression                   #
 #                                             #
 ###############################################
 
-mdlA = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp
-mdlB = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure 
-mdlC = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance
-mdlD = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance + ceoVotingPower
-mdlE = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality
-mdlF = bankruptcy_score ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality + I(ceoTenure^2)
+mdlA = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp
+mdlB = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure 
+mdlC = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance
+mdlD = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance + ceoVotingPower
+mdlE = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality
+mdlF = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality + I(ceoTenure^2)
 
 
 df.p = pdata.frame(df, index=c("rawData.GVKEY", "year"))
@@ -177,17 +191,22 @@ rsltD = plm(mdlD, df.p,  model="within")
 rsltE = plm(mdlE, df.p,  model="within")
 rsltF = plm(mdlF, df.p,  model="within")
 
-rsltERandom = plm(mdlE, df.p,  model="random")
 rsltEORS = plm(mdlE, df.p,  model="pooling")
 
 # Hausman test
+rsltERandom = plm(mdlE, df.p,  model="random")
 phtest(rsltE, rsltERandom)
 
-pFtest(rsltE, rsltEORS) 
-
 summary(rsltE)
-stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, rsltF, type = "latex", add.lines = list(c("Fixed Effect: Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Fixed Effect: Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
+stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, rsltF, type = "latex", dep.var.caption = "", add.lines = list(c("Fixed Effect: Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Fixed Effect: Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
 
+#hetroskidacity test
+lmtest::bptest(rsltE,
+               data = df.p)
+
+
+
+vif(rsltE)
 ###############################################
 #                                             #
 #            Machine Learning                 #
@@ -220,15 +239,17 @@ inTrainID <- sample(unique(df$rawData.GVKEY), round(nID * p), replace=FALSE)
 train <- df[df$rawData.GVKEY %in% inTrainID, ] 
 test <- df[!df$rawData.GVKEY %in% inTrainID, ]
 
-summary(train)
-summary(test)
+summary(train$bankruptcy_class)
+summary(test$bankruptcy_class)
+
+intersect(train$rawData.GVKEY, test$rawData.GVKEY)
 
 # K-fold Random Forest
 numFolds <- caret::trainControl(method = "cv", number = 10)
 cpGrid <- expand.grid(.cp = seq(0.001, 0.5, 0.001))
 
 
-tree = caret::train(mdlE, data = train, method = "rpart", trControl = numFolds, tuneGrid = cpGrid)
+#tree = caret::train(mdlE, data = train, method = "rpart", trControl = numFolds, tuneGrid = cpGrid)
 
 # -------------  Regression -------------------------
 rsltReg <- lm(mdlE, data = train)

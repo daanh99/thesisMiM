@@ -24,7 +24,7 @@ capitaliqAggregated = capitaliq %>%
 
 capitaliqAggregated = rename(capitaliqAggregated, amountAquired = n)
   
-# Keep all records that include CEO or chief executive officer
+# Keetp all records that include CEO or chief executive officer
 #execucomp = filter(execucomp, grepl("CEO | Chief executive officer", execucomp$TITLE, ignore.case = TRUE))
 execucomp = filter(execucomp, execucomp$CEOANN == "CEO")
 
@@ -167,7 +167,7 @@ duplicateRowNames = occur[occur$Freq > 1,]
 
 #descriptive 1
 dfOnlyInteresting = select(df.p, "amountAquired", "NumberDirectors", "AnnualReportDate", "GenderRatio", "AGE", "roa", "xrd", "aquisitionFin", "aqusitionsNot0", "CEOTenure", "compRatio", "laggedAquisition", "amountAquired_mean")
-stargazer(dfOnlyInteresting, type = "latex", title="Descriptive statistics", digits=1, out="descriptives.doc")
+stargazer(dfOnlyInteresting, type = "html", title="Descriptive statistics", digits=1, out="descriptives.doc")
 
 summary(df$AnnualReportDate)
 
@@ -200,6 +200,11 @@ rsltE <- plm(mdlE, data = df.p, family = "binomial", model="within")
 stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, title = "With colon",  align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
 summary(rsltE)
 
+#Hausman Test
+rsltE_RandomEffects = plm(mdlE, data = df.p, family = "binomial", model="random")
+phtest(rsltE, rsltE_RandomEffects)
+
+
 logLik.plm <- function(object){
   out <- -plm::nobs(object) * log(2 * var(object$residuals) * pi)/2 - deviance(object)/(2 * var(object$residuals))
   
@@ -215,8 +220,11 @@ logLik(rsltD)
 logLik(rsltE)
 
 
-
 # Correlation Table
-correlation = cor(dfOnlyInteresting, method = c("spearman"))
-stargazer(correlation)
+dfCor = dfOnlyInteresting
+dfCor$industry = NULL
+dfCor$completedAquisition = NULL
+dfCor$AnnualReportDate = as.numeric(dfCor$AnnualReportDate)
+correlation = cor(dfCor, method = c("pearson"))
+stargazer(correlation, type="html", out="correlation.doc")
 
