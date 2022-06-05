@@ -23,6 +23,7 @@ capitaliqAggregated = capitaliq %>%
   count(announcedDate)
 
 capitaliqAggregated = rename(capitaliqAggregated, amountAquired = n)
+
   
 # Keetp all records that include CEO or chief executive officer
 #execucomp = filter(execucomp, grepl("CEO | Chief executive officer", execucomp$TITLE, ignore.case = TRUE))
@@ -130,21 +131,21 @@ dfaqusyearly = df %>%
   group_by(AnnualReportDate = AnnualReportDate - 1) %>%
   summarise_at(vars(amountAquired), list(amountAquired_mean = mean))
 
+step1 = inner_join(x = capitaliqAggregated, y = ids, by = c("relcompanyid"= "companyid"))
+calpitaliqAggregatedWithIndustry = inner_join(x = step1, y = execucomp, by = c("gvkey" = "GVKEY", "announcedDate" = "YEAR"))
+
+calpitaliqAggregatedWithIndustry$SPINDEX = substr(calpitaliqAggregatedWithIndustry$SPINDEX, 1, 2)
 
 
-ggplot(dfaqusyearly, aes(x=AnnualReportDate, y=amountAquired_mean)) + geom_bar(stat="identity")
+dfaqusyearly2 = calpitaliqAggregatedWithIndustry %>%
+  group_by(announcedDate = announcedDate - 1, SPINDEX) %>%
+  summarise_at(vars(amountAquired), list(amountAquired_mean_per_industry = mean))
+
+
 df = inner_join(x = df, y = dfaqusyearly, by = c("AnnualReportDate"= "AnnualReportDate"))
-df$amountAquired_factor = cut(df$amountAquired_mean, breaks = c(-1, 1.1, 1.25, 2), labels=c("cold", "normal", "hot"))
+df = inner_join(x = df, y = dfaqusyearly2, by = c("AnnualReportDate"= "announcedDate", "SPINDEX" = "SPINDEX"))
 
-ggplot(df, aes(x=compRatio, y=amountAquired, color=amountAquired_mean)) +
-  geom_point() + 
-  geom_smooth(method=glm, method.args=list(family = "poisson"), se=FALSE, fullrange=TRUE)
-
-ggplot(df, aes(x=compRatio, y=amountAquired)) +
-  geom_point() + 
-  geom_smooth(method=glm, method.args=list(family = "poisson"), se=FALSE, fullrange=TRUE) +
-  ylim(0, 10)
-
+df = rename(df, amountAquired_mean_per_industry = amountAquired_mean_per_industry.x)
 
 # Descriptives and tables
 df = na.omit(df)
@@ -164,7 +165,6 @@ df.p = pdata.frame(df, index = c("GVKEY", "AnnualReportDate"))
 occur = data.frame(table(row.names(df.p)))
 duplicateRowNames = occur[occur$Freq > 1,]
 
-
 #descriptive 1
 dfOnlyInteresting = select(df.p, "amountAquired", "NumberDirectors", "AnnualReportDate", "GenderRatio", "AGE", "roa", "xrd", "aquisitionFin", "aqusitionsNot0", "CEOTenure", "compRatio", "laggedAquisition", "amountAquired_mean")
 stargazer(dfOnlyInteresting, type = "html", title="Descriptive statistics", digits=1, out="descriptives.doc")
@@ -178,11 +178,11 @@ df.p$compXAquiredMean  = df.p$compRatio * df.p$amountAquired_mean
 #----------------------------------------------------------
 # Define models
 #----------------------------------------------------------
-mdlA <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean
-mdlB <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean + compRatio
-mdlC <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean + compRatio + compRatio:NumberDirectors
-mdlD <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean + compRatio + compRatio:amountAquired_mean
-mdlE <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean + compRatio + compRatio:NumberDirectors + compRatio:amountAquired_mean
+mdlA <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry
+mdlB <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio
+mdlC <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:NumberDirectors
+mdlD <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:amountAquired_mean
+mdlE <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:NumberDirectors + compRatio:amountAquired_mean
 
 
 #----------------------------------------------------------

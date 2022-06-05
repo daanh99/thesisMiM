@@ -68,7 +68,7 @@ df = data.frame(rawData.GVKEY = as.factor(rawData$GVKEY))
 
 # ============== Control Variables ====================
 df$ceoAge = rawData$AGE
-df$ceoGender = ifelse(rawData$GENDER == "MALE", 1, 0)
+df$ceoGender = as.factor(ifelse(rawData$GENDER == "MALE", 1, 0))
 df$firmSize = rawData$at
 df$genderRatio = rawData$GenderRatio
 df$industry = as.factor(substr(rawData$SPINDEX, 1, 2))
@@ -81,7 +81,7 @@ df$ceoOwnership = as.numeric(ifelse(is.na(rawData$SHROWN_TOT_PCT), 0, rawData$SH
 
 # ================ Research variables ================
 #CEO Duality
-df$ceoDuality = ifelse(grepl("CEO|Chief Executive Officer", rawData$TITLEANN, ignore.case = TRUE) & grepl("Chairman|Chair", rawData$TITLEANN, ignore.case = TRUE), 1, 0)
+df$ceoDuality = as.factor(ifelse(grepl("CEO|Chief Executive Officer", rawData$TITLEANN, ignore.case = TRUE) & grepl("Chairman|Chair", rawData$TITLEANN, ignore.case = TRUE), 1, 0))
 hist(df$ceoDuality)
 
 # CEO Tenure
@@ -89,7 +89,7 @@ df$ceoTenure <- rawData$YEAR - rawData$BECAMECEO
 #df$ceoTenure2 = rawData$TimeRole
 
 # CEO attendance
-df$ceoAttendance = ifelse(rawData$Attend_LESS75_PCT == "Yes", 1, 0)
+df$ceoAttendance = as.factor(ifelse(rawData$Attend_LESS75_PCT == "Yes", 1, 0))
 
 # CEO Voting power
 #df$ceoVotingPower = as.numeric(ifelse(is.na(rawData$Pcnt_Ctrl_Votingpower), 0, rawData$Pcnt_Ctrl_Votingpower))
