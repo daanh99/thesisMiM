@@ -50,6 +50,8 @@ execucomp$YEAR = as.integer(substr(execucomp$YEAR, 1, 4))
 execucomp$BECAMECEO = as.integer(substr(execucomp$BECAMECEO, 1, 4))
 execucomp$BECAMECEO = as.integer(substr(execucomp$BECAMECEO, 1, 4))
 
+
+hist(df$ceoVotingPower, breaks = 100)
 ###############################################
 #                                             #
 #                MERGING STEP                 #
@@ -60,9 +62,7 @@ execucomp$BECAMECEO = as.integer(substr(execucomp$BECAMECEO, 1, 4))
 step1 = inner_join(x = execucomp, y = ids, by = c("GVKEY"= "gvkey"))
 step2 = inner_join(x = step1, y = fin, by = c("GVKEY"= "gvkey", "YEAR" = "fyear"))
 step3 = inner_join(x = step2, y = boardEx, by = c("tic"= "Ticker", "YEAR" = "AnnualReportDate"))
-
 rawData = inner_join(x = step3, y = ISS, by = c("TICKER" = "Ticker", "YEAR" = "year"))
-
 
 df = data.frame(rawData.GVKEY = as.factor(rawData$GVKEY))
 
@@ -77,6 +77,7 @@ df$timeOtherComp = ifelse(is.na(rawData$AvgTimeOthCo), 0, rawData$AvgTimeOthCo)
 df$year = rawData$YEAR
 df$sales =rawData$sale
 df$boardSize = rawData$NumberDirectors
+df$ceoOwnership = as.numeric(ifelse(is.na(rawData$SHROWN_TOT_PCT), 0, rawData$SHROWN_TOT_PCT))
 
 # ================ Research variables ================
 #CEO Duality
@@ -91,7 +92,7 @@ df$ceoTenure <- rawData$YEAR - rawData$BECAMECEO
 df$ceoAttendance = ifelse(rawData$Attend_LESS75_PCT == "Yes", 1, 0)
 
 # CEO Voting power
-df$ceoVotingPower = as.numeric(ifelse(is.na(rawData$Pcnt_Ctrl_Votingpower), 0, rawData$Pcnt_Ctrl_Votingpower))
+#df$ceoVotingPower = as.numeric(ifelse(is.na(rawData$Pcnt_Ctrl_Votingpower), 0, rawData$Pcnt_Ctrl_Votingpower))
 
 # Bankruptcy score
 df$bankruptcy_score = 3.3 * rawData$ebit/rawData$at + 1 * rawData$sale/rawData$at + 0.6 * rawData$mkvalt/rawData$lt + 1.2 * rawData$wcap/rawData$at + 1.4 * rawData$re/rawData$at
@@ -105,7 +106,6 @@ summary(df$ceoTenure)
 
 df$ceoVotingPower[is.na(df$ceoVotingPower)] = 0
 
-
 df = na.omit(df)
 
 #remove duplicate GVkey-year combinations
@@ -115,8 +115,6 @@ df = df %>%
 
 hist(df$bankruptcy_score, breaks = 100)
 
-
-
 dfCor = df
 dfCor$industry = NULL
 dfCor$Freq = NULL
@@ -125,6 +123,9 @@ correlation = cor(dfCor, method = c("pearson"))
 stargazer(correlation)
 
 summary(df)
+hist(df$ceoOwnership, breaks=100)
+
+hist(df$timeOtherComp)
 
 # --------------- Plots ----------------
 ggplot(df, 
@@ -153,18 +154,24 @@ df.scaled$rawData.GVKEY = df$rawData.GVKEY
 
 #df = df.scaled
 
+dfPower = data.frame(ceoAttendance = df$ceoAttendance)
+dfPower$ceoDuality = df$ceoDuality
+dfPower$ceoTenure = df$ceoTenure
+dfPower$ceoVotingPower = df$ceoOwnership
+prcomp(dfPower, scale = FALSE)
+
 ###############################################
 #                                             #
 #                Regression                   #
 #                                             #
 ###############################################
 
-mdlA = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp
-mdlB = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure 
-mdlC = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance
-mdlD = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance + ceoVotingPower
-mdlE = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality
-mdlF = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + timeOtherComp + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality + I(ceoTenure^2)
+mdlA = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize 
+mdlB = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure 
+mdlC = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance
+mdlD = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoOwnership
+mdlE = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoOwnership + ceoDuality
+mdlF = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoOwnership + ceoDuality
 
 
 df.p = pdata.frame(df, index=c("rawData.GVKEY", "year"))
@@ -204,9 +211,12 @@ stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, rsltF, type = "latex", dep.var.capt
 lmtest::bptest(rsltE,
                data = df.p)
 
+hist(df$ceoVotingPower, breaks = 100)
+hist(df$ceoOwnership, breaks = 100)
 
+summary(df)
 
-vif(rsltE)
+stargazer(vif(rsltEORS))
 ###############################################
 #                                             #
 #            Machine Learning                 #
@@ -218,8 +228,9 @@ df$bankruptcy_class = df$bankruptcy_score < 2.99
 mdlA = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize
 mdlB = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure 
 mdlC = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance
-mdlD = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoVotingPower
-mdlE = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality
+mdlD = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance
+mdlE = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoDuality
+mdlE = as.factor(bankruptcy_class) ~ ceoTenure + ceoAttendance + ceoOwnership + ceoDuality
 
 
 # Test the bankruptcy_class balance of the dataset
@@ -236,8 +247,10 @@ nID <- length(unique(df$rawData.GVKEY))
 p = 0.75
 set.seed(123)
 inTrainID <- sample(unique(df$rawData.GVKEY), round(nID * p), replace=FALSE)
+
 train <- df[df$rawData.GVKEY %in% inTrainID, ] 
 test <- df[!df$rawData.GVKEY %in% inTrainID, ]
+
 
 summary(train$bankruptcy_class)
 summary(test$bankruptcy_class)
@@ -250,9 +263,6 @@ cpGrid <- expand.grid(.cp = seq(0.001, 0.5, 0.001))
 
 
 #tree = caret::train(mdlE, data = train, method = "rpart", trControl = numFolds, tuneGrid = cpGrid)
-
-# -------------  Regression -------------------------
-rsltReg <- lm(mdlE, data = train)
 
 # -------------  Binomial regression ----------------
 rsltLog <- glm(mdlE, data = train, family = binomial(link="logit"))
@@ -286,8 +296,8 @@ numB <- length(labels(terms(mdlE, data=train)))
 mA <- round(sqrt(numA))
 mB <- round(sqrt(numB))
 
-rsltFrstA <- randomForest(mdlA, data=train, ntree=100, mtry=mA, importance=TRUE, type="classification", cp = 0.003)
-rsltFrstB <- randomForest(mdlE, data=train, ntree=100, mtry=mB, importance=TRUE, type="classification", cp = 0.003)
+rsltFrstA <- randomForest(mdlA, data=train, ntree=100, mtry=mA, importance=TRUE, type="classification")
+rsltFrstB <- randomForest(mdlE, data=train, ntree=100, mtry=mB, importance=TRUE, type="classification")
 
 round(importance(rsltFrstA), 3)
 round(importance(rsltFrstB), 3)
@@ -331,13 +341,11 @@ yvalue    <- test$bankruptcy_class
 probTreeA <- predict(rsltTreeB, test, type="prob")[,2]
 probFrstA <- predict(rsltFrstB, test, type="prob")[,2]
 probGbmA  <- predict(rsltGbmB, test,  type="response", n.trees=nTrees)
-probReg   <- predict(rsltReg, test,   type="response")
 probLog   <- predict(rsltLog, test,   type="response")
 
 predTreeA <- as.numeric(probTreeA > 0.5)
 predFrstA <- as.numeric(probFrstA > 0.5)
 predGbmA <-  as.numeric(probGbmA > 0.5)
-predReg <-   as.numeric(probReg > 0.5)
 predLog <-   as.numeric(probLog > 0.5)
 
 # ---- II ----
@@ -352,20 +360,17 @@ table(Predicted = predGbmA,  Observed = yvalue)
 pred.TreeA  <- prediction(probTreeA, yvalue)
 pred.FrstA  <- prediction(probFrstA, yvalue)
 pred.GbmA   <- prediction(probGbmA,  yvalue)
-pred.Reg    <- prediction(probReg,   yvalue) 
 pred.Log    <- prediction(probLog,   yvalue)
 
 perf.TreeA  <- performance(pred.TreeA, measure="tpr", x.measure="fpr")
 perf.FrstA  <- performance(pred.FrstA, measure="tpr", x.measure="fpr")
 perf.GbmA   <- performance(pred.GbmA,  measure="tpr", x.measure="fpr")
-perf.Reg    <- performance(pred.Reg,   measure="tpr", x.measure="fpr")
 perf.Log    <- performance(pred.Log,   measure="tpr", x.measure="fpr")
 
 
-plot(perf.TreeA, lty = 1, lwd = 2.0, col = "red", main="Classification performance on test set")
+plot(perf.TreeA, lty = 1, lwd = 2.0, col = "red", main="Classification performance on test set (With control vars)")
 plot(perf.FrstA, lty = 1, lwd = 2.0, col = "blue", add = TRUE)
 plot(perf.GbmA,  lty = 1, lwd = 2.0, col = "green", add = TRUE)
-plot(perf.Reg,   lty = 1, lwd = 2.0, col = "gray", add = TRUE)
 plot(perf.Log,   lty = 1, lwd = 2.0, col = "yellow", add = TRUE)
 
 abline(a = 0, b = 1, lty = 3, lwd = 1.5)
@@ -373,22 +378,20 @@ abline(a = 0, b = 1, lty = 3, lwd = 1.5)
 legend(0.40,0.30, c("Classification tree",
                     "Random forests",
                     "Gradient boosting (50 Trees)",
-                    "Linear Regression",
                     "Logistic Regression"),
-       col = c("red", "blue", "green", "grey", "yellow"), lwd=3)
+       col = c("red", "blue", "green", "yellow"), lwd=3)
 
 # ---- II ----
 # Find auc values
 aucTreeA <- performance(pred.TreeA, measure = "auc")@y.values[[1]]
 aucFrstA <- performance(pred.FrstA, measure = "auc")@y.values[[1]]
 aucGbmA  <- performance(pred.GbmA,  measure = "auc")@y.values[[1]]
-aucReg   <- performance(pred.Reg,   measure = "auc")@y.values[[1]]
 aucLog   <- performance(pred.Log,   measure = "auc")@y.values[[1]]
  
 # Make data frame with results
 dsAUC <- data.frame(
-  Model=c("Classification tree", "Random forest", "Gradient boosting machine", "Linear Regression", "Logistic Regression"),
-  AUC.A=c(aucTreeA, aucFrstA, aucGbmA, aucReg, aucLog))
+  Model=c("Classification tree", "Random forest", "Gradient boosting machine", "Logistic Regression"),
+  AUC.A=c(aucTreeA, aucFrstA, aucGbm,, aucLog))
 
 stargazer(dsAUC, summary = FALSE,
           align = TRUE, no.space = TRUE, rownames = FALSE)
