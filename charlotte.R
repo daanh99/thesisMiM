@@ -5,6 +5,7 @@ library(stargazer)
 library(plm)
 library(likelihoodExplore)
 library(lmtest)
+library(pglm)
 
 boardex = read.csv("data/char/Board Ex 1999.csv")
 capitaliq = read.csv("data/char/capitaliq3.csv")
@@ -104,8 +105,15 @@ df$compRatio = df$BONUS / (df$TOTAL_ALT1 + df$BONUS)
 
 # ---------- Independent Variable ----------------
 
-df$compRatio = df$BONUS / (df$STOCK_AWARDS_FV + df$OPTION_AWARDS_FV + df$BONUS)
+summary(df$BONUS)
+
+df$compRatio = (df$BONUS + df$SALARY) / (df$OPTION_AWARDS_FV + df$STOCK_AWARDS_FV + df$BONUS + df$SALARY)
+hist(df$compRatio, breaks=100)
+summary(df$compRatio)
+
 df$bonusToSalaryRatio = df$BONUS / (df$SALARY + df$BONUS)
+
+summary(df$compRatio)
 
 # --------------------------------------------- Descriptive stats -------------------------------
 
@@ -179,37 +187,44 @@ summary(df$AnnualReportDate)
 df.p$compXNumDirectors = df.p$compRatio * df.p$NumberDirectors
 df.p$compXAquiredMean  = df.p$compRatio * df.p$amountAquired_mean
 
+df.p = na.omit(df.p)
+
+
+summary(df.p)
+
+
 # Table 2
 #----------------------------------------------------------
 # Define models
 #----------------------------------------------------------
-mdlA <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry
-mdlB <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio
-mdlC <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:NumberDirectors
-mdlD <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:amountAquired_mean
-mdlE <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:NumberDirectors + compRatio:amountAquired_mean
-mdlF <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + bonusToSalaryRatio + bonusToSalaryRatio:NumberDirectors + bonusToSalaryRatio:amountAquired_mean
+mdlA <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry
+mdlB <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio
+mdlC <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:NumberDirectors
+mdlD <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:amountAquired_mean
+mdlE <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:NumberDirectors + compRatio:amountAquired_mean
+mdlF <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + bonusToSalaryRatio + bonusToSalaryRatio:NumberDirectors + bonusToSalaryRatio:amountAquired_mean
 
 
 #----------------------------------------------------------
 # Estimate the models
 #----------------------------------------------------------
-rsltA <- plm(mdlA, data = df.p, family = "binomial", model="within")
-rsltB <- plm(mdlB, data = df.p, family = "binomial", model="within")
-rsltC <- plm(mdlC, data = df.p, family = "binomial", model="within")
-rsltD <- plm(mdlD, data = df.p, family = "binomial", model="within")
-rsltE <- plm(mdlE, data = df.p, family = "binomial", model="within")
-rsltF <- plm(mdlF, data = df.p, family = "binomial", model="within")
+rsltA <- pglm(mdlA, data = df.p, family = negbin, model="within")
+rsltB <- pglm(mdlB, data = df.p, family = negbin, model="within")
+rsltD <- pglm(mdlD, data = df.p, family = negbin, model="within")
+rsltE <- pglm(mdlE, data = df.p, family = negbin, model="within")
+rsltC <- pglm(mdlC, data = df.p, family = negbin, model="within")
+rsltF <- pglm(mdlF, data = df.p, family = negbin, model="within", method="nr", print.level = 0, index = c("GVKEY", "AnnualReportDate"))
 
 
-summary(rsltF)
+summary(rsltA)
 #----------------------------------------------------------
 # Make a table (with stargazer)
 #----------------------------------------------------------
-stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, rsltF, title = "With colon",  align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
+stargazer(coeftest(rsltA), coeftest(rsltB), coeftest(rsltC), coeftest(rsltD), coeftest(rsltE), title = "Without model 6",  align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
 
 #Hausman Test
 rsltE_RandomEffects = plm(mdlE, data = df.p, family = "binomial", model="random")
+
 phtest(rsltE, rsltE_RandomEffects)
 
 result = df
@@ -230,11 +245,7 @@ logLik.plm <- function(object){
   return(out)
 }
 
-logLik(rsltA)
-logLik(rsltB)
-logLik(rsltC)
-logLik(rsltD)
-logLik(rsltE)
+
 
 lrtest(rsltA, rsltB, rsltC, rsltD, rsltE, rsltF)
 
@@ -250,3 +261,4 @@ dfCor$AnnualReportDate = as.numeric(dfCor$AnnualReportDate)
 correlation = cor(dfCor, method = c("pearson"))
 stargazer(correlation, type="html", out="correlation.doc")
 
+stargazer(coeftest(rsltA), coeftest(rsltB), coeftest(rsltC), coeftest(rsltD), coeftest(rsltE), coeftest(rsltF), title = "Negative Binomial Regression",  align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
