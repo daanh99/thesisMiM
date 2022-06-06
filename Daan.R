@@ -160,7 +160,6 @@ dfPower$ceoTenure = df$ceoTenure
 dfPower$ceoVotingPower = df$ceoOwnership
 prcomp(dfPower, scale = FALSE)
 
-###############################################
 #                                             #
 #                Regression                   #
 #                                             #
@@ -171,7 +170,7 @@ mdlB = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + ind
 mdlC = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance
 mdlD = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoOwnership
 mdlE = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoOwnership + ceoDuality
-mdlF = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoOwnership + ceoDuality
+mdlF = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoOwnership + ceoDuality + I(ceoTenure^2)
 
 
 df.p = pdata.frame(df, index=c("rawData.GVKEY", "year"))
@@ -205,7 +204,7 @@ rsltERandom = plm(mdlE, df.p,  model="random")
 phtest(rsltE, rsltERandom)
 
 summary(rsltE)
-stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, rsltF, type = "latex", dep.var.caption = "", add.lines = list(c("Fixed Effect: Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Fixed Effect: Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
+stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, type = "latex", dep.var.caption = "", add.lines = list(c("Fixed Effect: Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Fixed Effect: Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
 
 #hetroskidacity test
 lmtest::bptest(rsltE,

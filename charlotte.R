@@ -3,10 +3,12 @@ library(fuzzyjoin)
 library(ggplot2)
 library(stargazer)
 library(plm)
+library(likelihoodExplore)
+library(lmtest)
 
 boardex = read.csv("data/char/Board Ex 1999.csv")
 capitaliq = read.csv("data/char/capitaliq3.csv")
-execucomp = read.csv("data/char/Execucomp 1995.csv")
+execucomp = read.csv("data/char/REAL EXECUCOMP.csv")
 ids = read.csv("data/char/ciq common.csv")
 fin = read.csv("data/char/Compustat Fundamentals Annual 1995.csv")
 
@@ -100,7 +102,10 @@ df$compRatio = df$BONUS / (df$TOTAL_ALT1 + df$BONUS)
 #dfmean$compRatio = dfmean$BONUS_mean / (dfmean$TOTAL_ALT1_mean + dfmean$BONUS_mean)
 #dfmean = dfmean[dfmean$amountAquired_mean < 10, ]
 
-df$compRatio = df$BONUS / (df$TOTAL_ALT1 + df$BONUS)
+# ---------- Independent Variable ----------------
+
+df$compRatio = df$BONUS / (df$STOCK_AWARDS_FV + df$OPTION_AWARDS_FV + df$BONUS)
+df$bonusToSalaryRatio = df$BONUS / (df$SALARY + df$BONUS)
 
 # --------------------------------------------- Descriptive stats -------------------------------
 
@@ -183,6 +188,7 @@ mdlB <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisiti
 mdlC <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:NumberDirectors
 mdlD <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:amountAquired_mean
 mdlE <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + compRatio + compRatio:NumberDirectors + compRatio:amountAquired_mean
+mdlF <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + SPINDEX + aquisitionFin + xrd + laggedAquisition + NumberDirectors + amountAquired_mean_per_industry + bonusToSalaryRatio + bonusToSalaryRatio:NumberDirectors + bonusToSalaryRatio:amountAquired_mean
 
 
 #----------------------------------------------------------
@@ -193,16 +199,27 @@ rsltB <- plm(mdlB, data = df.p, family = "binomial", model="within")
 rsltC <- plm(mdlC, data = df.p, family = "binomial", model="within")
 rsltD <- plm(mdlD, data = df.p, family = "binomial", model="within")
 rsltE <- plm(mdlE, data = df.p, family = "binomial", model="within")
+rsltF <- plm(mdlF, data = df.p, family = "binomial", model="within")
 
+
+summary(rsltF)
 #----------------------------------------------------------
 # Make a table (with stargazer)
 #----------------------------------------------------------
-stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, title = "With colon",  align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
-summary(rsltE)
+stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, rsltF, title = "With colon",  align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
 
 #Hausman Test
 rsltE_RandomEffects = plm(mdlE, data = df.p, family = "binomial", model="random")
 phtest(rsltE, rsltE_RandomEffects)
+
+result = df
+result$fitted = fitted(rsltE)
+result$residual = resid(rsltE)
+
+#Plot
+ggplot(result) + geom_point(aes(fitted, residual))
+
+plot(rsltE, which=1, col=c("blue")) # Residuals vs Fitted Plot
 
 
 logLik.plm <- function(object){
@@ -218,6 +235,11 @@ logLik(rsltB)
 logLik(rsltC)
 logLik(rsltD)
 logLik(rsltE)
+
+lrtest(rsltA, rsltB, rsltC, rsltD, rsltE, rsltF)
+
+
+qf(p=.05, df1=9, df2=3271, lower.tail=FALSE)
 
 
 # Correlation Table
