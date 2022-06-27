@@ -11,6 +11,11 @@ library(ROCR)
 library(magrittr)
 library(caret)
 library(car)
+library(lmtest)
+library(corrplot)
+library(xtable)
+library(collapse)
+
 
 
 ISS = read.csv2("data/daan/ISS.csv", head = TRUE, sep=",")
@@ -67,21 +72,30 @@ rawData = inner_join(x = step3, y = ISS, by = c("TICKER" = "Ticker", "YEAR" = "y
 df = data.frame(rawData.GVKEY = as.factor(rawData$GVKEY))
 
 # ============== Control Variables ====================
-df$ceoAge = rawData$AGE
-df$ceoGender = as.factor(ifelse(rawData$GENDER == "MALE", 1, 0))
-df$firmSize = rawData$at
-df$genderRatio = rawData$GenderRatio
-df$industry = as.factor(substr(rawData$SPINDEX, 1, 2))
-df$OtherBoards = ifelse(is.na(rawData$TotNoOthLstdBrd), 0, rawData$TotNoOthLstdBrd)
-df$timeOtherComp = ifelse(is.na(rawData$AvgTimeOthCo), 0, rawData$AvgTimeOthCo)
-df$year = rawData$YEAR
-df$sales =rawData$sale
-df$boardSize = rawData$NumberDirectors
-df$ceoOwnership = as.numeric(ifelse(is.na(rawData$SHROWN_TOT_PCT), 0, rawData$SHROWN_TOT_PCT))
+df$ceoAge =         rawData$AGE
+df$ceoGender =      ifelse(rawData$GENDER == "MALE", 1, 0)
+df$firmSize =       rawData$at / 1000
+df$genderRatio =    rawData$GenderRatio
+df$industry =       as.factor(substr(rawData$SPINDEX, 1, 2))
+df$OtherBoards =    ifelse(is.na(rawData$TotNoOthLstdBrd), 0, rawData$TotNoOthLstdBrd)
+df$timeOtherComp =  ifelse(is.na(rawData$AvgTimeOthCo), 0, rawData$AvgTimeOthCo)
+df$year =           rawData$YEAR
+#df$sales =          rawData$sale / 1000
+df$boardSize =      rawData$NumberDirectors
+df$ceoOwnership =   as.numeric(ifelse(is.na(rawData$SHROWN_TOT_PCT), 0, rawData$SHROWN_TOT_PCT))
+df$employees =      rawData$emp
+
+# Altman's drivers
+#df$mkvalt = rawData$mkvalt / 1000
+#df$ebit = rawData$ebit / 1000
+#df$lt = rawData$lt / 1000
+#df$wcap = rawData$wcap / 1000
+#df$re = rawData$re / 1000
+#df$at = rawData$at / 1000
 
 # ================ Research variables ================
 #CEO Duality
-df$ceoDuality = as.factor(ifelse(grepl("CEO|Chief Executive Officer", rawData$TITLEANN, ignore.case = TRUE) & grepl("Chairman|Chair", rawData$TITLEANN, ignore.case = TRUE), 1, 0))
+df$ceoDuality = ifelse(grepl("CEO|Chief Executive Officer", rawData$TITLEANN, ignore.case = TRUE) & grepl("Chairman|Chair", rawData$TITLEANN, ignore.case = TRUE), 1, 0)
 hist(df$ceoDuality)
 
 # CEO Tenure
@@ -89,13 +103,13 @@ df$ceoTenure <- rawData$YEAR - rawData$BECAMECEO
 #df$ceoTenure2 = rawData$TimeRole
 
 # CEO attendance
-df$ceoAttendance = as.factor(ifelse(rawData$Attend_LESS75_PCT == "Yes", 1, 0))
+df$ceoAttendance = ifelse(rawData$Attend_LESS75_PCT == "Yes", 1, 0)
 
 # CEO Voting power
-#df$ceoVotingPower = as.numeric(ifelse(is.na(rawData$Pcnt_Ctrl_Votingpower), 0, rawData$Pcnt_Ctrl_Votingpower))
+df$ceoVotingPower = as.numeric(ifelse(is.na(rawData$Pcnt_Ctrl_Votingpower), 0, rawData$Pcnt_Ctrl_Votingpower))
 
 # Bankruptcy score
-df$bankruptcy_score = 3.3 * rawData$ebit/rawData$at + 1 * rawData$sale/rawData$at + 0.6 * rawData$mkvalt/rawData$lt + 1.2 * rawData$wcap/rawData$at + 1.4 * rawData$re/rawData$at
+df$altman_Z_score = 3.3 * rawData$ebit/rawData$at + 1 * rawData$sale/rawData$at + 0.6 * rawData$mkvalt/rawData$lt + 1.2 * rawData$wcap/rawData$at + 1.4 * rawData$re/rawData$at
 
 # --------------- Filters & transformations ----------------
 
@@ -106,32 +120,51 @@ summary(df$ceoTenure)
 
 df$ceoVotingPower[is.na(df$ceoVotingPower)] = 0
 
+lengthTotal = nrow(df)
 df = na.omit(df)
+lengthNoNA = nrow(df)
+
 
 #remove duplicate GVkey-year combinations
 df = df %>%
   group_by(rawData.GVKEY, year) %>%
   slice_head(n=1)
 
-hist(df$bankruptcy_score, breaks = 100)
+hist(df$altman_Z_score, breaks = 100)
 
 dfCor = df
 dfCor$industry = NULL
 dfCor$Freq = NULL
 dfCor$rawData.GVKEY = NULL
 correlation = cor(dfCor, method = c("pearson"))
-stargazer(correlation)
+upper<-correlation
+upper[upper.tri(correlation)]<-""
+upper<-as.data.frame(upper)
+upper
+
+
+corstars(dfCor, method="pearson", removeTriangle = "upper", result = "latex")
+
 
 summary(df)
 hist(df$ceoOwnership, breaks=100)
-
 hist(df$timeOtherComp)
+
+hist(df$firmSize, breaks = 100)
+hist(log(df$mkvalt), breaks = 100)
+hist(log(df$ebit), breaks = 100)
+hist(log(df$lt), breaks = 100)
+hist(df$wcap, breaks = 100)
+hist(df$re, breaks = 100)
+
+hist(log(df$emp))
+
 
 # --------------- Plots ----------------
 ggplot(df, 
-  aes(x=ceoTenure, y=bankruptcy_score)) +
+  aes(x=ceoTenure, y=altman_Z_score)) +
   geom_point() + 
-  geom_smooth(method=glm, formula = bankruptcy_score ~ ceoTenure + ceoTenure^2, se=FALSE, fullrange=FALSE) +
+  geom_smooth(method=glm, formula = altman_Z_score ~ ceoTenure + ceoTenure^2, se=FALSE, fullrange=FALSE) +
   ggtitle("Plot of bankruptcy score vs CEO tenure") + 
   xlab("CEO charateristic") + ylab("Altman Z-score")
 
@@ -158,19 +191,54 @@ dfPower = data.frame(ceoAttendance = df$ceoAttendance)
 dfPower$ceoDuality = df$ceoDuality
 dfPower$ceoTenure = df$ceoTenure
 dfPower$ceoVotingPower = df$ceoOwnership
-prcomp(dfPower, scale = FALSE)
+wdbc.pr = prcomp(dfPower, scale = TRUE)
+wdbc.pr
+screeplot(wdbc.pr, type = "l", npcs = 15, main = "Screeplot of the first 10 PCs")
+abline(h = 1, col="red", lty=5)
+legend("topright", legend=c("Eigenvalue = 1"),
+       col=c("red"), lty=5, cex=0.6)
+cumpro <- cumsum(wdbc.pr$sdev^2 / sum(wdbc.pr$sdev^2))
 
+plot(cumpro[0:15], xlab = "PC #", ylab = "Amount of explained variance", main = "Cumulative variance plot")
+abline(v = 6, col="blue", lty=5)
+abline(h = 0.88759, col="blue", lty=5)
+legend("topleft", legend=c("Cut-off @ PC6"),
+       col=c("blue"), lty=5, cex=0.6)
+
+df$ceoPower = 0.03801804 * df$ceoAttendance + 0.39843998 * df$ceoDuality + 0.67516645 * df$ceoTenure + 0.61963737 * df$ceoVotingPower
+
+
+df <- df %>%                            # Add lagged column
+  group_by(rawData.GVKEY) %>%
+  dplyr::mutate(lagged_altman_Z_score = dplyr::lag(altman_Z_score, n = 1, default = NA)) %>% 
+  as.data.frame()
+
+df$lagged_altman_Z_score
+
+###############################################
 #                                             #
 #                Regression                   #
 #                                             #
 ###############################################
 
-mdlA = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize 
-mdlB = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure 
-mdlC = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance
-mdlD = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoOwnership
-mdlE = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoOwnership + ceoDuality
-mdlF = log(bankruptcy_score) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoOwnership + ceoDuality + I(ceoTenure^2)
+#log(mkvalt) + log(ebit) + log(lt) + log(wcap) + log(re) +
+
+df <- df %>%                            # Add lagged column
+  group_by(rawData.GVKEY) %>%
+  dplyr::mutate(altman_z_change = altman_Z_score - lagged_altman_Z_score) %>% 
+  as.data.frame()
+
+df$altman_z_change
+
+hist(df$altman_z_change, breaks=100)
+
+mdlA = log(altman_Z_score) ~ ceoAge + ceoGender + genderRatio + log(firmSize) + (employees) + industry + OtherBoards + boardSize + ceoOwnership
+mdlB = log(altman_Z_score) ~ ceoAge + ceoGender + genderRatio + log(firmSize) + (employees) + industry + OtherBoards + boardSize + ceoOwnership + ceoTenure 
+mdlC = log(altman_Z_score) ~ ceoAge + ceoGender + genderRatio + log(firmSize) + (employees) + industry + OtherBoards + boardSize + ceoOwnership + ceoAttendance
+mdlD = log(altman_Z_score) ~ ceoAge + ceoGender + genderRatio + log(firmSize) + (employees) + industry + OtherBoards + boardSize + ceoOwnership + ceoVotingPower
+mdlE = log(altman_Z_score) ~ ceoAge + ceoGender + genderRatio + log(firmSize) + (employees) + industry + OtherBoards + boardSize + ceoOwnership + ceoDuality
+mdlF = log(altman_Z_score) ~ ceoAge + ceoGender + genderRatio + log(firmSize) + (employees) + industry + OtherBoards + boardSize + ceoOwnership + ceoTenure + ceoAttendance + ceoVotingPower + ceoDuality
+mdlG = log(altman_Z_score) ~ ceoAge + ceoGender + genderRatio + log(firmSize) + (employees) + industry + OtherBoards + boardSize + ceoOwnership
 
 
 df.p = pdata.frame(df, index=c("rawData.GVKEY", "year"))
@@ -190,21 +258,37 @@ length(df$rawData.GVKEY)
 summary(df.p)
 stargazer(df.p, type = "latex", title="Descriptive statistics", digits=3)
 
+df.p = na.omit(df.p)
+
 rsltA = plm(mdlA, df.p,  model="within")
 rsltB = plm(mdlB, df.p,  model="within")
 rsltC = plm(mdlC, df.p,  model="within")
 rsltD = plm(mdlD, df.p,  model="within")
 rsltE = plm(mdlE, df.p,  model="within")
 rsltF = plm(mdlF, df.p,  model="within")
+rsltG = plm(mdlG, df.p,  model="within")
 
-rsltEORS = plm(mdlE, df.p,  model="pooling")
+
+rsltApool = plm(mdlA, df.p,  model="pooling")
+rsltBpool = plm(mdlB, df.p,  model="pooling")
+rsltCpool = plm(mdlC, df.p,  model="pooling")
+rsltDpool = plm(mdlD, df.p,  model="pooling")
+rsltEpool = plm(mdlE, df.p,  model="pooling")
+rsltFpool = plm(mdlF, df.p,  model="pooling")
+
+
+result = df.p
+result$fitted = fitted(rsltE)
+result$residual = resid(rsltE)
 
 # Hausman test
-rsltERandom = plm(mdlE, df.p,  model="random")
-phtest(rsltE, rsltERandom)
+rsltFRandom = plm(mdlF, df.p,  model="random")
+phtest(rsltF, rsltFRandom)
 
-summary(rsltE)
-stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, type = "latex", dep.var.caption = "", add.lines = list(c("Fixed Effect: Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Fixed Effect: Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
+summary(rsltF)
+stargazer(rsltA, rsltB, rsltC, rsltD, rsltE, rsltF, type = "latex", dep.var.caption = "", add.lines = list(c("Fixed Effect: Year", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Fixed Effect: Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
+stargazer(rsltApool, rsltBpool, rsltCpool, rsltDpool, rsltEpool, rsltFpool, type = "latex", dep.var.caption = "")
+
 
 #hetroskidacity test
 lmtest::bptest(rsltE,
@@ -215,25 +299,65 @@ hist(df$ceoOwnership, breaks = 100)
 
 summary(df)
 
-stargazer(vif(rsltEORS))
+stargazer(vif(rsltDpool))
+
+lrtest(rsltA, rsltB, rsltC, rsltD, rsltE, rsltF)
+
+
+mean(rsltA$residuals)
+mean(rsltB$residuals)
+mean(rsltC$residuals)
+mean(rsltD$residuals)
+mean(rsltE$residuals)
+mean(rsltF$residuals)
+
+
+
+qqnorm(rsltF$residuals)
+abline(qqline(rsltF$residuals))
+plot(df$altman_Z_score, rsltF$residuals)
+
+hist(rsltF$residual, breaks=1000)
+
+shapiro.test(rsltF[['residuals']])
+qqnorm(rsltC$residuals)
+abline(qqline(rsltF$residuals))
+
+plot(df$ceoVotingPower, rsltF$residuals)
+
+hist(df$GenderRatio)
+
+
+plot(rsltA$residuals, rsltA$assign)
+
+
+
+
+#Plot
+ggplot(result) + geom_point(aes(fitted, residual))
+
+plot(rsltE, which=1, col=c("blue")) # Residuals vs Fitted Plot
+
+
+
 ###############################################
 #                                             #
 #            Machine Learning                 #
 #                                             #
 ###############################################
-df$bankruptcy_class = df$bankruptcy_score < 2.99
+df$class = df$altman_Z_score < 2.99
 
 
-mdlA = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize
-mdlB = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure 
-mdlC = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance
-mdlD = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance
-mdlE = as.factor(bankruptcy_class) ~ ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure + ceoAttendance + ceoDuality
-mdlE = as.factor(bankruptcy_class) ~ ceoTenure + ceoAttendance + ceoOwnership + ceoDuality
+#mdlA = as.factor(class) ~ cash + ebit + ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize
+#mdlB = as.factor(class) ~  ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoTenure 
+#mdlC = as.factor(class) ~  ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoOwnership + ceoTenure + ceoAttendance
+#mdlD = as.factor(class) ~  ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoOwnership + ceoTenure + ceoAttendance
+#mdlE = as.factor(class) ~  ceoAge + ceoGender + firmSize + genderRatio + industry + OtherBoards + boardSize + ceoOwnership + ceoTenure + ceoAttendance + ceoDuality
+#mdlF = as.factor(class) ~  ceoTenure + ceoAttendance + ceoOwnership + ceoDuality
 
 
-# Test the bankruptcy_class balance of the dataset
-summary(df$bankruptcy_class)
+# Test the class balance of the dataset
+summary(df$class)
 
 
 # -----------------  Create training/test split ----------------------------  
@@ -251,8 +375,8 @@ train <- df[df$rawData.GVKEY %in% inTrainID, ]
 test <- df[!df$rawData.GVKEY %in% inTrainID, ]
 
 
-summary(train$bankruptcy_class)
-summary(test$bankruptcy_class)
+summary(train$class)
+summary(test$class)
 
 intersect(train$rawData.GVKEY, test$rawData.GVKEY)
 
@@ -336,7 +460,7 @@ summary(rsltGbmB)
 
 # ------------------- performance analysis ------------------
 
-yvalue    <- test$bankruptcy_class
+yvalue    <- test$class
 probTreeA <- predict(rsltTreeB, test, type="prob")[,2]
 probFrstA <- predict(rsltFrstB, test, type="prob")[,2]
 probGbmA  <- predict(rsltGbmB, test,  type="response", n.trees=nTrees)
@@ -395,3 +519,49 @@ dsAUC <- data.frame(
 stargazer(dsAUC, summary = FALSE,
           align = TRUE, no.space = TRUE, rownames = FALSE)
 
+
+
+
+corstars <-function(x, method=c("pearson", "spearman"), removeTriangle=c("upper", "lower"),
+                    result=c("none", "html", "latex")){
+  #Compute correlation matrix
+  require(Hmisc)
+  x <- as.matrix(x)
+  correlation_matrix<-rcorr(x, type=method[1])
+  R <- correlation_matrix$r # Matrix of correlation coeficients
+  p <- correlation_matrix$P # Matrix of p-value 
+  
+  ## Define notions for significance levels; spacing is important.
+  #mystars <- ifelse(p < .0001, "****", ifelse(p < .001, "*** ", ifelse(p < .01, "**  ", ifelse(p < .05, "*   ", "    "))))
+  mystars <- ""
+  ## trunctuate the correlation matrix to two decimal
+  R <- format(round(cbind(rep(-1.11, ncol(x)), R), 2))[,-1]
+  
+  ## build a new matrix that includes the correlations with their apropriate stars
+  Rnew <- matrix(paste(R, mystars, sep=""), ncol=ncol(x))
+  diag(Rnew) <- paste(diag(R), " ", sep="")
+  rownames(Rnew) <- colnames(x)
+  colnames(Rnew) <- paste(colnames(x), "", sep="")
+  
+  ## remove upper triangle of correlation matrix
+  if(removeTriangle[1]=="upper"){
+    Rnew <- as.matrix(Rnew)
+    Rnew[upper.tri(Rnew, diag = TRUE)] <- ""
+    Rnew <- as.data.frame(Rnew)
+  }
+  
+  ## remove lower triangle of correlation matrix
+  else if(removeTriangle[1]=="lower"){
+    Rnew <- as.matrix(Rnew)
+    Rnew[lower.tri(Rnew, diag = TRUE)] <- ""
+    Rnew <- as.data.frame(Rnew)
+  }
+  
+  ## remove last column and return the correlation matrix
+  Rnew <- cbind(Rnew[1:length(Rnew)-1])
+  if (result[1]=="none") return(Rnew)
+  else{
+    if(result[1]=="html") print(xtable(Rnew), type="html")
+    else print(xtable(Rnew), type="latex") 
+  }
+} 

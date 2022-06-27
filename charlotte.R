@@ -6,6 +6,12 @@ library(plm)
 library(likelihoodExplore)
 library(lmtest)
 library(pglm)
+library(tidyverse)
+library(collapse)
+library(car)
+library(xtable)
+
+
 
 boardex = read.csv("data/char/Board Ex 1999.csv")
 capitaliq = read.csv("data/char/capitaliq3.csv")
@@ -37,9 +43,9 @@ boardex$AnnualReportDate = as.integer(substr(boardex$AnnualReportDate, 1, 4))
 execucomp$BECAMECEO = as.integer(substr(execucomp$BECAMECEO, 1, 4))
 
 ###############################################
-#
-#            MERGING STEP
-#
+#                                             #
+#               MERGING STEP                  #
+#                                             #
 ###############################################
 
 # Merge execuComp and BoardEx based on the Ticker field
@@ -70,7 +76,7 @@ df <- df %>%                            # Add lagged column
 
 summary(df$CEOTenure)
 hist(df$CEOTenure)
-
+df$CEOTenure
 
 negativeTenure = df[df$CEOTenure < 0,]
 df = df[df$CEOTenure >= 0,]
@@ -126,16 +132,6 @@ ggplot(df, aes(x=compRatio, y=amountAquired)) + geom_point() + geom_smooth(metho
   ylim(0, 10)
 
 #============================== moderating factor 1: Board size -================================
-# Fix directors
-dfmean$NumberDirectors_factor = cut(dfmean$NumberDirectors_mean, breaks = c(0, 8, 12, 30), labels = c("Small (0,8]", "Medium (8,12]", "Large 12,30]"))
-hist(dfmean$NumberDirectors_mean, breaks = 40)
-
-ggplot(dfmean, aes(x=compRatio, y=amountAquired_mean, color=NumberDirectors_factor)) +
-  geom_point() + 
-  geom_smooth(method=glm, method.args=list(family = "poisson") , se=FALSE, fullrange=FALSE) + ggtitle("Plot of average amount of aquisitions vs compensation ratio per board size") +
- xlab("Compensation ratio") + ylab("Average aquisitions per year") +
-  ylim(0, 10)
-
 
 
 #============================== moderating factor 2: Yearly acquisitions -========================
@@ -178,9 +174,6 @@ df.p = pdata.frame(df, index = c("GVKEY", "AnnualReportDate"))
 occur = data.frame(table(row.names(df.p)))
 duplicateRowNames = occur[occur$Freq > 1,]
 
-#descriptive 1
-dfOnlyInteresting = select(df.p, "amountAquired", "NumberDirectors", "AnnualReportDate", "GenderRatio", "AGE", "roa", "xrd", "aquisitionFin", "aqusitionsNot0", "CEOTenure", "compRatio", "laggedAquisition", "amountAquired_mean")
-stargazer(dfOnlyInteresting, type = "html", title="Descriptive statistics", digits=1, out="descriptives.doc")
 
 summary(df$AnnualReportDate)
 
@@ -192,6 +185,13 @@ df.p = na.omit(df.p)
 
 summary(df.p)
 
+length(unique(df.p$EXEC_FULLNAME))
+
+nrow(df.p)
+
+#descriptive 1
+dfOnlyInteresting = select(df.p, "AnnualReportDate", "amountAquired", "NumberDirectors", "GenderRatio", "AGE", "roa", "xrd", "aquisitionFin", "CEOTenure", "compRatio", "laggedAquisition", "amountAquired_mean")
+stargazer(dfOnlyInteresting, type = "text", title="Descriptive statistics", digits=1, out="descriptives.doc")
 
 # Table 2
 #----------------------------------------------------------
@@ -208,6 +208,7 @@ mdlF <- amountAquired ~ GenderRatio + CEOTenure + AGE + roa + aquisitionFin + xr
 #----------------------------------------------------------
 # Estimate the models
 #----------------------------------------------------------
+rsltDummy <- plm(mdlF, data = df.p, family = negbin, model="pooling")
 rsltA <- pglm(mdlA, data = df.p, family = negbin, model="within")
 rsltB <- pglm(mdlB, data = df.p, family = negbin, model="within")
 rsltD <- pglm(mdlD, data = df.p, family = negbin, model="within")
@@ -216,11 +217,11 @@ rsltC <- pglm(mdlC, data = df.p, family = negbin, model="within")
 rsltF <- pglm(mdlF, data = df.p, family = negbin, model="within", method="nr", print.level = 0, index = c("GVKEY", "AnnualReportDate"))
 
 
-summary(rsltA)
 #----------------------------------------------------------
 # Make a table (with stargazer)
 #----------------------------------------------------------
 stargazer(coeftest(rsltA), coeftest(rsltB), coeftest(rsltC), coeftest(rsltD), coeftest(rsltE), title = "Without model 6",  align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
+summary(rsltDummy)
 
 #Hausman Test
 rsltE_RandomEffects = plm(mdlE, data = df.p, family = "binomial", model="random")
@@ -236,6 +237,12 @@ ggplot(result) + geom_point(aes(fitted, residual))
 
 plot(rsltE, which=1, col=c("blue")) # Residuals vs Fitted Plot
 
+# VIF Test
+
+rsltFORS = plm(mdlB, df.p,  model="pooling")
+summary(rsltFORS)
+stargazer(vif(rsltFORS), type="text", out="VIF.doc")
+vif(rsltFORS)
 
 logLik.plm <- function(object){
   out <- -plm::nobs(object) * log(2 * var(object$residuals) * pi)/2 - deviance(object)/(2 * var(object$residuals))
@@ -246,7 +253,14 @@ logLik.plm <- function(object){
 }
 
 
+hist(df$amountAquired, breaks = 1000)
+length(df$amountAquired[df$amountAquired == 0])
+length(df$amountAquired)
 
+
+shapiro.test(rsltA[['residuals']])
+qqnorm(rsltC$residuals)
+abline(qqline(rsltF$residuals))
 lrtest(rsltA, rsltB, rsltC, rsltD, rsltE, rsltF)
 
 
@@ -259,6 +273,6 @@ dfCor$industry = NULL
 dfCor$completedAquisition = NULL
 dfCor$AnnualReportDate = as.numeric(dfCor$AnnualReportDate)
 correlation = cor(dfCor, method = c("pearson"))
-stargazer(correlation, type="html", out="correlation.doc")
+stargazer(correlation, type="latex", out="correlation.doc")
 
-stargazer(coeftest(rsltA), coeftest(rsltB), coeftest(rsltC), coeftest(rsltD), coeftest(rsltE), coeftest(rsltF), title = "Negative Binomial Regression",  align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
+stargazer(coeftest(rsltA), coeftest(rsltB), coeftest(rsltC), coeftest(rsltD), coeftest(rsltE), title = "Negative Binomial Regression",  align=TRUE, no.space=TRUE, intercept.bottom = FALSE, add.lines = list(c("Year", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes"), c("Company", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes")))
